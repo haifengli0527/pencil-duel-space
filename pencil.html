@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>紙上彈筆對戰</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1/dist/peerjs.min.js"></script>
+<style>
+  :root{
+    --space-0:#03040c;
+    --space-1:#070a1c;
+    --space-2:#0e1330;
+    --panel-bg: rgba(14,19,48,0.72);
+    --panel-border: rgba(140,160,255,0.18);
+    --graphite:#e7ebf7;
+    --graphite-soft:#98a2c4;
+    --ink-blue:#4fc3ff;
+    --ink-blue-soft:#9fe0ff;
+    --ink-red:#ff6b6b;
+    --ink-red-soft:#ffb199;
+    --asteroid:#7a7266;
+    --station-gold:#ffd76b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:
+      radial-gradient(ellipse at 20% 15%, rgba(79,195,255,0.12) 0%, transparent 45%),
+      radial-gradient(ellipse at 85% 80%, rgba(255,107,107,0.10) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 50%, var(--space-2) 0%, var(--space-0) 75%);
+    font-family:'Noto Sans TC', sans-serif;
+    color:var(--graphite);
+    padding:24px 14px;
+  }
+  .wrap{ width:100%; max-width:820px; }
+  .title-row{ text-align:center; margin-bottom:6px; }
+  .title{
+    font-family:'Noto Sans TC', sans-serif;
+    font-weight:900;
+    font-size:clamp(2rem, 6.5vw, 2.6rem);
+    color:var(--graphite);
+    display:inline-block;
+    letter-spacing:0.14em;
+    text-shadow:0 0 4px rgba(79,195,255,0.75), 0 0 26px rgba(79,195,255,0.4), 0 0 50px rgba(79,195,255,0.2);
+  }
+  .subtitle{
+    font-size:0.82rem;
+    color:var(--graphite-soft);
+    margin-top:-8px;
+    letter-spacing:0.5px;
+  }
+  details.rules{
+    max-width:520px;
+    margin:8px auto 16px;
+    background:var(--panel-bg);
+    border:1px solid var(--panel-border);
+    border-radius:6px;
+    padding:6px 12px;
+    font-size:0.82rem;
+    color:var(--graphite-soft);
+    backdrop-filter:blur(6px);
+  }
+  details.rules summary{ cursor:pointer; font-weight:700; color:var(--graphite); outline:none; }
+  details.rules .rules-body{ margin-top:8px; line-height:1.6; }
+
+  /* ---- Lobby ---- */
+  .lobby-card{
+    max-width:460px;
+    margin:0 auto;
+    background:var(--panel-bg);
+    border:1px solid var(--panel-border);
+    border-radius:8px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.5), 0 0 40px rgba(79,195,255,0.06);
+    padding:6px;
+    backdrop-filter:blur(6px);
+  }
+  .lobby-tabs{ display:flex; gap:4px; padding:6px 6px 0; }
+  .tab-btn{
+    flex:1;
+    font-family:'Noto Sans TC', sans-serif;
+    font-size:0.82rem;
+    font-weight:500;
+    padding:9px 6px;
+    background:transparent;
+    border:none;
+    border-bottom:2px solid transparent;
+    color:var(--graphite-soft);
+    cursor:pointer;
+    border-radius:4px 4px 0 0;
+  }
+  .tab-btn.active{ color:var(--graphite); font-weight:700; border-bottom-color:var(--ink-blue); background:rgba(79,195,255,0.08); }
+  .tab-panel{ padding:16px 18px 20px; }
+  .lobby-desc{ font-size:0.85rem; color:var(--graphite-soft); line-height:1.6; margin:0 0 12px; }
+  .join-row{ display:flex; gap:8px; }
+  #joinCodeInput{
+    flex:1;
+    font-family:'Noto Sans TC', sans-serif;
+    font-size:1.1rem;
+    letter-spacing:3px;
+    text-align:center;
+    text-transform:uppercase;
+    padding:9px 10px;
+    border:1.5px solid var(--panel-border);
+    border-radius:4px;
+    background:rgba(255,255,255,0.06);
+    color:var(--graphite);
+  }
+  .lobby-status{ margin-top:12px; font-size:0.86rem; color:var(--graphite-soft); line-height:1.8; }
+  .room-code{
+    display:inline-block;
+    font-family:'Noto Sans TC', sans-serif;
+    font-weight:700;
+    font-size:1.3rem;
+    letter-spacing:4px;
+    color:var(--ink-blue);
+    background:rgba(79,195,255,0.12);
+    padding:4px 12px;
+    border-radius:4px;
+    margin:0 8px 0 4px;
+  }
+  .copy-btn{ font-size:0.75rem; padding:5px 12px; vertical-align:middle; }
+  .waiting-line{ margin-top:8px; }
+  .dots::after{ content:'…'; animation:dotsBlink 1.2s steps(4) infinite; }
+  @keyframes dotsBlink{ 0%{content:'';} 25%{content:'.';} 50%{content:'..';} 75%{content:'...';} }
+  .error-text{ color:var(--ink-red); }
+
+  /* ---- Status bar / board ---- */
+  .status-bar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    background:var(--panel-bg);
+    border:1px solid var(--panel-border);
+    border-bottom:none;
+    border-radius:6px 6px 0 0;
+    padding:9px 16px;
+    font-size:0.92rem;
+    flex-wrap:wrap;
+    backdrop-filter:blur(6px);
+  }
+  .turn-badge{ display:flex; align-items:center; gap:8px; font-weight:700; color:var(--graphite); }
+  .ink-dot{
+    width:13px; height:13px; border-radius:50%;
+    display:inline-block;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,0.25), 0 0 8px currentColor;
+    transition:background-color .2s;
+  }
+  .tallies{ display:flex; align-items:center; gap:14px; font-size:0.82rem; color:var(--graphite-soft); }
+  .tallies b{ color:var(--graphite); }
+  #netStatus{ font-size:0.78rem; color:var(--ink-red); }
+
+  .board-panel{
+    position:relative;
+    background:radial-gradient(ellipse at 50% 45%, #0c1436 0%, #05060f 78%);
+    border:1px solid var(--panel-border);
+    border-radius:0 0 8px 8px;
+    box-shadow:0 12px 30px rgba(0,0,0,0.55), 0 0 50px rgba(79,195,255,0.05);
+    overflow:hidden;
+  }
+  svg#board{ display:block; width:100%; height:auto; touch-action:none; }
+  .edge-vignette{
+    position:absolute; inset:0;
+    pointer-events:none;
+    background:radial-gradient(ellipse at 50% 50%, transparent 52%, rgba(0,0,0,0.5) 86%, rgba(0,0,0,0.92) 100%);
+  }
+
+  .zone-label{
+    font-family:'Noto Sans TC', sans-serif;
+    font-size:13px;
+    fill:var(--graphite-soft);
+    opacity:0;
+    transition:opacity .4s;
+    pointer-events:none;
+    user-select:none;
+  }
+  .zone-label.show{ opacity:0.85; }
+
+  .select-ring{ animation:pulseRing 1.3s ease-in-out infinite; }
+  @keyframes pulseRing{ 0%{opacity:0.3;} 50%{opacity:0.95;} 100%{opacity:0.3;} }
+  .station-pulse{ animation:stationPulse 2.2s ease-in-out infinite; }
+  @keyframes stationPulse{ 0%{opacity:0.35;} 50%{opacity:0.9;} 100%{opacity:0.35;} }
+  @media (prefers-reduced-motion: reduce){
+    .select-ring, .station-pulse{ animation:none; opacity:0.85; }
+    .dots::after{ animation:none; content:'...'; }
+  }
+  .hit-area{ pointer-events:none; }
+  .hit-area.grabbable{ pointer-events:all; cursor:grab; }
+  .hit-area.grabbable:active{ cursor:grabbing; }
+
+  .controls{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-top:14px;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .btn{
+    font-family:'Noto Sans TC', sans-serif;
+    font-weight:500;
+    font-size:0.85rem;
+    padding:8px 18px;
+    background:rgba(255,255,255,0.06);
+    border:1.5px solid var(--panel-border);
+    border-radius:3px 3px 8px 3px;
+    color:var(--graphite);
+    cursor:pointer;
+    box-shadow:2px 2px 0 rgba(0,0,0,0.3);
+  }
+  .btn:hover{ background:rgba(255,255,255,0.12); }
+  .btn:active{ transform:translate(1px,1px); box-shadow:1px 1px 0 rgba(0,0,0,0.3); }
+  .btn.link-btn{ background:transparent; border:none; box-shadow:none; text-decoration:underline; padding:4px 6px; color:var(--graphite-soft); }
+  .btn:focus-visible, .tab-btn:focus-visible, #joinCodeInput:focus-visible{
+    outline:2px solid var(--ink-blue);
+    outline-offset:2px;
+  }
+  .hint{ font-size:0.78rem; color:var(--graphite-soft); }
+  .controls-left{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+
+  #winnerOverlay{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(3,4,12,0);
+    opacity:0; pointer-events:none;
+    transition:opacity .35s, background-color .35s;
+  }
+  #winnerOverlay.active{ opacity:1; pointer-events:auto; background:rgba(3,4,12,0.55); }
+  .stamp-card{
+    background:rgba(10,14,32,0.95);
+    border:4px solid var(--graphite);
+    border-radius:12px;
+    padding:22px 40px;
+    text-align:center;
+    transform:rotate(-6deg);
+    box-shadow:0 10px 40px rgba(0,0,0,0.6);
+    color:var(--graphite);
+  }
+  .stamp-card.p1{ border-color:var(--ink-blue); color:var(--ink-blue); box-shadow:0 10px 40px rgba(79,195,255,0.25); }
+  .stamp-card.p2{ border-color:var(--ink-red); color:var(--ink-red); box-shadow:0 10px 40px rgba(255,107,107,0.25); }
+  .stamp-title{ font-family:'Ma Shan Zheng', cursive; font-size:2.4rem; }
+  .stamp-card .btn{ margin-top:10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="title-row">
+    <div class="title">紙上彈筆對戰</div>
+    <div class="subtitle">小時候的紙上彈筆遊戲，這次搬到外太空對戰</div>
+  </div>
+
+  <div id="lobbyArea" class="lobby-card">
+    <div class="lobby-tabs">
+      <button class="tab-btn active" data-tab="local" type="button">本機雙人</button>
+      <button class="tab-btn" data-tab="create" type="button">建立房間</button>
+      <button class="tab-btn" data-tab="join" type="button">加入房間</button>
+    </div>
+    <div class="tab-panel" id="panel-local">
+      <p class="lobby-desc">兩人共用同一台裝置、輪流操作，就是原本的玩法。</p>
+      <button class="btn" id="startLocalBtn" type="button">開始本機對戰</button>
+    </div>
+    <div class="tab-panel" id="panel-create" hidden>
+      <p class="lobby-desc">建立房間後會拿到一組代碼，傳給朋友（LINE、簡訊都行），他輸入代碼加入後就會自動開始。這是點對點直連，不用註冊帳號，但少數嚴格的網路環境可能連不上。</p>
+      <button class="btn" id="createRoomBtn" type="button">建立房間</button>
+      <div id="createStatus" class="lobby-status"></div>
+    </div>
+    <div class="tab-panel" id="panel-join" hidden>
+      <p class="lobby-desc">輸入朋友給你的房間代碼：</p>
+      <div class="join-row">
+        <input id="joinCodeInput" maxlength="5" placeholder="房間代碼" autocomplete="off" autocapitalize="characters">
+        <button class="btn" id="joinRoomBtn" type="button">加入</button>
+      </div>
+      <div id="joinStatus" class="lobby-status"></div>
+    </div>
+  </div>
+
+  <div id="gameArea" hidden>
+    <details class="rules">
+      <summary>規則說明</summary>
+      <div class="rules-body">
+        雙方各有 10 顆棋子（太空船）。開局時藍方先在左半邊自由點擊放置全部棋子，放完後再點選其中一艘封為「旗艦」（有雙重生命，被打中一次不會馬上陣亡，造型也會馬上變得不一樣，方便辨認）。接著換紅方在右半邊放置並選旗艦。正式開打後兩人輪流出手：按住自己的一艘船，往想要的方向的「反方向」拖曳，放開後船會往另一邊彈射出去並畫出一條航跡——但拖曳時只會看到大概的瞄準方向，實際落點與是否命中要放開才會揭曉，力道越大方向也越難控制。如果航跡掃過對方的船，那艘船就會損失一條生命，生命耗盡才會陣亡。棋盤中央有一條危險的小行星帶，船的最終落點如果停在裡面就會直接墜毀。棋盤邊界是黑洞，力道拉過頭、衝出邊界的船也會直接被吞噬消失，所以拉滿力道不是零風險的事。雙方在自己陣地最深處都各自有一座基地，只要有船精準降落進「對方」的基地，就直接獲勝——不用等殲滅對方也能靠奇襲取勝！彈射結束後船最終停留的位置就是它的新座標，接著換對方出手。誰先把對方全部消滅、或搶先攻進對方基地，就獲勝！
+      </div>
+    </details>
+
+    <div class="status-bar">
+      <div class="turn-badge">
+        <span class="ink-dot" id="turnDot"></span>
+        <span id="statusText">藍方請在左半邊點擊放置棋子</span>
+      </div>
+      <div class="tallies">
+        <span>藍方剩餘 <b id="count1">0</b></span>
+        <span>紅方剩餘 <b id="count2">0</b></span>
+        <span id="netStatus"></span>
+      </div>
+    </div>
+
+    <div class="board-panel">
+      <svg id="board" viewBox="0 0 920 560" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="grain">
+            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="noise"/>
+            <feColorMatrix in="noise" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.03 0"/>
+          </filter>
+          <radialGradient id="spaceGradient" cx="50%" cy="45%" r="75%">
+            <stop offset="0%" stop-color="#111a44"/>
+            <stop offset="60%" stop-color="#080b22"/>
+            <stop offset="100%" stop-color="#020208"/>
+          </radialGradient>
+          <radialGradient id="blueBaseGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#4fc3ff" stop-opacity="0.55"/>
+            <stop offset="70%" stop-color="#4fc3ff" stop-opacity="0.18"/>
+            <stop offset="100%" stop-color="#4fc3ff" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="redBaseGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#ff6b6b" stop-opacity="0.55"/>
+            <stop offset="70%" stop-color="#ff6b6b" stop-opacity="0.18"/>
+            <stop offset="100%" stop-color="#ff6b6b" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <rect id="boardBg" x="0" y="0" width="920" height="560" fill="url(#spaceGradient)"></rect>
+        <rect x="0" y="0" width="920" height="560" filter="url(#grain)" opacity="0.5"></rect>
+        <g id="starsLayer"></g>
+        <g id="hazardLayer"></g>
+        <g id="basesLayer"></g>
+        <text class="zone-label" id="labelBlue" x="73" y="29">藍方星域</text>
+        <text class="zone-label" id="labelRed" x="799" y="29">紅方星域</text>
+        <g id="tracesLayer"></g>
+        <g id="piecesLayer"></g>
+        <g id="previewLayer"></g>
+      </svg>
+      <div class="edge-vignette"></div>
+      <div id="winnerOverlay">
+        <div class="stamp-card" id="stampCard">
+          <div class="stamp-title" id="stampTitle">獲勝！</div>
+          <button class="btn" id="restartBtn2" type="button">再玩一局</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="controls-left">
+        <span class="hint">提示：拖越遠彈越用力，方向也越難控制；中央小行星帶跟邊界黑洞都會讓船直接墜毀，攻進對方陣地深處的基地也能直接獲勝</span>
+      </div>
+      <div class="controls-left">
+        <button class="btn" id="restartBtn" type="button">重新開始</button>
+        <button class="btn link-btn" id="leaveBtn" type="button">返回大廳</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const BOARD_W = 920, BOARD_H = 560, CENTER_X = 460;
+  const DOT_R = 10;
+  const MIN_GAP = 30;
+  const EDGE_MARGIN = 24;
+  const CENTER_MARGIN = 64;
+  const MAX_DRAG = 130;
+  const MIN_SHOT = 60;
+  const MAX_SHOT = 680;
+  const HIT_R = DOT_R + 5;
+  const MIN_ANGLE_ERR = 2;   // 力道最小時的角度誤差（度）
+  const MAX_ANGLE_ERR = 14;  // 力道最大時的角度誤差（度）
+  const HAZARD_HALF_WIDTH = 55; // 中央小行星帶（淘汰區）的半寬
+  const BASE_R = 6;              // 基地的實際捕獲半徑（刻意比棋子還小，考驗精準度）
+  const BASE_ICON_R = 14;        // 基地圖示的視覺大小（讓它看起來顯眼、重要）
+  const BASE_INSET = 34;         // 基地離該方最外側邊界的距離
+  const BLUE_BASE = { x: EDGE_MARGIN + BASE_INSET, y: BOARD_H/2 };
+  const RED_BASE = { x: BOARD_W - EDGE_MARGIN - BASE_INSET, y: BOARD_H/2 };
+  const ICE_CONFIG = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:global.stun.twilio.com:3478' }
+    ]
+  };
+  const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+  const svg = document.getElementById('board');
+  const tracesLayer = document.getElementById('tracesLayer');
+  const piecesLayer = document.getElementById('piecesLayer');
+  const previewLayer = document.getElementById('previewLayer');
+  const starsLayer = document.getElementById('starsLayer');
+  const hazardLayer = document.getElementById('hazardLayer');
+  const basesLayer = document.getElementById('basesLayer');
+  const statusText = document.getElementById('statusText');
+  const turnDot = document.getElementById('turnDot');
+  const count1El = document.getElementById('count1');
+  const count2El = document.getElementById('count2');
+  const labelBlue = document.getElementById('labelBlue');
+  const labelRed = document.getElementById('labelRed');
+  const winnerOverlay = document.getElementById('winnerOverlay');
+  const stampCard = document.getElementById('stampCard');
+  const stampTitle = document.getElementById('stampTitle');
+  const netStatusEl = document.getElementById('netStatus');
+  const lobbyArea = document.getElementById('lobbyArea');
+  const gameArea = document.getElementById('gameArea');
+
+  function colorFor(owner){ return owner === 1 ? 'var(--ink-blue)' : 'var(--ink-red)'; }
+
+  let state = null;
+  let dragging = null;
+  let localIdCounters = { 1:0, 2:0 };
+
+  // --- Networking state ---
+  let peer = null;
+  let conn = null;
+  let myRole = null;      // 1 = host/blue, 2 = joiner/red, null = local hot-seat
+  let networked = false;
+
+  function nextIdFor(owner){
+    localIdCounters[owner] += 1;
+    return owner + '-' + localIdCounters[owner];
+  }
+
+  function freshState(){
+    return { phase:'setup1', turn:1, pieces:[], traces:[], winner:null };
+  }
+
+  // ---------- Lobby wiring ----------
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.tab-panel').forEach(p => { p.hidden = true; });
+      document.getElementById('panel-' + btn.dataset.tab).hidden = false;
+    });
+  });
+
+  document.getElementById('startLocalBtn').addEventListener('click', () => {
+    networked = false; myRole = null;
+    enterGame();
+  });
+  document.getElementById('createRoomBtn').addEventListener('click', () => createRoom());
+  document.getElementById('joinRoomBtn').addEventListener('click', joinRoom);
+  document.getElementById('joinCodeInput').addEventListener('keydown', e => {
+    if(e.key === 'Enter') joinRoom();
+  });
+
+  function genCode(len){
+    let s = '';
+    for(let i=0;i<len;i++) s += CODE_CHARS[Math.floor(Math.random()*CODE_CHARS.length)];
+    return s;
+  }
+  function roomIdFor(code){ return 'pencilduel-' + code; }
+
+  function setCreateStatus(html){ document.getElementById('createStatus').innerHTML = html; }
+  function setJoinStatus(html){ document.getElementById('joinStatus').innerHTML = html; }
+
+  function createRoom(attemptsLeft){
+    if(typeof Peer === 'undefined'){
+      setCreateStatus('<span class="error-text">無法載入連線功能，請檢查網路連線或換個瀏覽器再試</span>');
+      return;
+    }
+    attemptsLeft = (attemptsLeft == null) ? 5 : attemptsLeft;
+    const code = genCode(5);
+    setCreateStatus('建立中…');
+    let p;
+    try{ p = new Peer(roomIdFor(code), { config: ICE_CONFIG }); }
+    catch(err){ setCreateStatus('<span class="error-text">建立房間失敗，請重新整理頁面再試</span>'); return; }
+
+    p.on('open', () => {
+      peer = p;
+      setCreateStatus(
+        '房間代碼：<span class="room-code">' + code + '</span>' +
+        '<button class="btn copy-btn" id="copyCodeBtn" type="button">複製</button>' +
+        '<div class="waiting-line">等待朋友加入<span class="dots"></span></div>'
+      );
+      const copyBtn = document.getElementById('copyCodeBtn');
+      if(copyBtn){
+        copyBtn.addEventListener('click', () => {
+          if(navigator.clipboard){ navigator.clipboard.writeText(code).catch(() => {}); }
+        });
+      }
+    });
+    p.on('connection', c => {
+      conn = c;
+      setupConnHandlers();
+      conn.on('open', () => {
+        networked = true; myRole = 1;
+        enterGame();
+      });
+    });
+    p.on('error', err => {
+      if(err && err.type === 'unavailable-id' && attemptsLeft > 0){
+        createRoom(attemptsLeft - 1);
+      } else {
+        setCreateStatus('<span class="error-text">建立房間失敗，請重新整理頁面再試一次</span>');
+      }
+    });
+  }
+
+  function joinRoom(){
+    if(typeof Peer === 'undefined'){
+      setJoinStatus('<span class="error-text">無法載入連線功能，請檢查網路連線或換個瀏覽器再試</span>');
+      return;
+    }
+    const codeRaw = document.getElementById('joinCodeInput').value.trim().toUpperCase();
+    if(!codeRaw){ setJoinStatus('<span class="error-text">請輸入房間代碼</span>'); return; }
+    setJoinStatus('連線中…');
+    let p;
+    try{ p = new Peer(undefined, { config: ICE_CONFIG }); }
+    catch(err){ setJoinStatus('<span class="error-text">連線失敗，請重新整理頁面再試</span>'); return; }
+
+    p.on('open', () => {
+      peer = p;
+      const c = p.connect(roomIdFor(codeRaw), { reliable:true });
+      conn = c;
+      setupConnHandlers();
+      conn.on('open', () => {
+        networked = true; myRole = 2;
+        enterGame();
+      });
+    });
+    p.on('error', () => {
+      setJoinStatus('<span class="error-text">找不到這個房間，確認代碼是否正確</span>');
+    });
+  }
+
+  function setupConnHandlers(){
+    conn.on('data', handleRemoteMessage);
+    conn.on('close', () => { netStatusEl.textContent = '對方已離線'; });
+    conn.on('error', () => { netStatusEl.textContent = '連線發生問題'; });
+  }
+
+  function sendMsg(msg){
+    if(networked && conn && conn.open){ conn.send(msg); }
+  }
+
+  function handleRemoteMessage(msg){
+    if(!msg || !msg.type) return;
+    if(msg.type === 'place'){
+      state.pieces.push({ id: msg.id, x: msg.x, y: msg.y, owner: msg.owner, alive:true, lives:1, king:false });
+      const count = state.pieces.filter(p => p.owner === msg.owner).length;
+      if(count >= 10){
+        if(msg.owner === 1){ state.phase = 'king1'; }
+        else { state.phase = 'king2'; }
+      }
+      render();
+    } else if(msg.type === 'king'){
+      const piece = state.pieces.find(p => p.id === msg.id);
+      if(piece){ piece.king = true; piece.lives = 2; }
+      if(msg.owner === 1){ state.phase = 'setup2'; }
+      else { state.phase = 'playing'; state.turn = 1; }
+      render();
+    } else if(msg.type === 'shot'){
+      applyShotEffect(msg);
+      render();
+    } else if(msg.type === 'restart'){
+      resetLocalState();
+      render();
+    }
+  }
+
+  function enterGame(){
+    lobbyArea.hidden = true;
+    gameArea.hidden = false;
+    netStatusEl.textContent = '';
+    resetLocalState();
+    render();
+  }
+
+  function leaveToLobby(){
+    if(conn){ try{ conn.close(); }catch(e){} }
+    if(peer){ try{ peer.destroy(); }catch(e){} }
+    conn = null; peer = null; networked = false; myRole = null;
+    gameArea.hidden = true;
+    lobbyArea.hidden = false;
+    document.getElementById('joinCodeInput').value = '';
+    setCreateStatus('');
+    setJoinStatus('');
+    netStatusEl.textContent = '';
+  }
+  document.getElementById('leaveBtn').addEventListener('click', leaveToLobby);
+
+  // ---------- Drawing helpers ----------
+  function makeSeededRandom(seed){
+    let s = seed;
+    return function(){ s = (s*9301+49297) % 233280; return s/233280; };
+  }
+
+  function drawStars(){
+    starsLayer.innerHTML = '';
+    const rnd = makeSeededRandom(7);
+    for(let i=0;i<130;i++){
+      const x = rnd()*BOARD_W, y = rnd()*BOARD_H;
+      const r = rnd() < 0.85 ? (0.6+rnd()*0.9) : (1.2+rnd()*1.3);
+      drawCircle(starsLayer, x, y, r, { fill:'#ffffff', opacity: 0.25+rnd()*0.55 });
+    }
+  }
+
+  function drawHazardAndBases(){
+    hazardLayer.innerHTML = '';
+    const bandX = CENTER_X - HAZARD_HALF_WIDTH;
+    const band = document.createElementNS(SVGNS, 'rect');
+    setAttrs(band, { x:bandX, y:0, width: HAZARD_HALF_WIDTH*2, height: BOARD_H, fill:'rgba(122,114,102,0.10)' });
+    hazardLayer.appendChild(band);
+    const rnd = makeSeededRandom(42);
+    for(let i=0;i<40;i++){
+      const y = rnd()*BOARD_H;
+      const x = CENTER_X + (rnd()*2-1) * HAZARD_HALF_WIDTH*0.9;
+      const r = 3 + rnd()*6;
+      drawCircle(hazardLayer, x, y, r, { fill:'rgba(122,114,102,0.55)', stroke:'rgba(90,84,74,0.6)', width:1 });
+    }
+
+    basesLayer.innerHTML = '';
+    drawBaseIcon(BLUE_BASE.x, BLUE_BASE.y, 'var(--ink-blue)', 'url(#blueBaseGlow)');
+    drawBaseIcon(RED_BASE.x, RED_BASE.y, 'var(--ink-red)', 'url(#redBaseGlow)');
+  }
+
+  function drawBaseIcon(cx, cy, color, glowUrl){
+    // 外圍光暈＋虛線力場只是「這裡很重要」的視覺標示，不代表可捕獲範圍
+    drawCircle(basesLayer, cx, cy, BASE_ICON_R+18, { fill: glowUrl });
+    drawCircle(basesLayer, cx, cy, BASE_ICON_R, { stroke: color, width:1.5, dash:'4 3', className:'station-pulse' });
+    const pts = [];
+    for(let i=0;i<5;i++){
+      const ang = -Math.PI/2 + i*(2*Math.PI/5);
+      pts.push([cx + Math.cos(ang)*BASE_ICON_R, cy + Math.sin(ang)*BASE_ICON_R]);
+    }
+    drawPolygon(basesLayer, pts, { fill:'rgba(255,255,255,0.08)', stroke: color, width:2 });
+    // 中心亮點＝實際的捕獲判定範圍（BASE_R），刻意比棋子小，落點要更準才能偷襲成功
+    drawCircle(basesLayer, cx, cy, BASE_R, { fill: color, opacity:0.95 });
+  }
+
+  function setAttrs(el, attrs){
+    for(const k in attrs){ el.setAttribute(k, attrs[k]); }
+  }
+
+  function drawLine(parent, x1,y1,x2,y2, opts){
+    const l = document.createElementNS(SVGNS, 'line');
+    setAttrs(l, {
+      x1, y1, x2, y2,
+      stroke: opts.stroke || '#333',
+      'stroke-width': opts.width || 2,
+      opacity: opts.opacity != null ? opts.opacity : 1,
+    });
+    if(opts.dash) l.setAttribute('stroke-dasharray', opts.dash);
+    if(opts.linecap) l.setAttribute('stroke-linecap', opts.linecap);
+    if(opts.className) l.setAttribute('class', opts.className);
+    parent.appendChild(l);
+    return l;
+  }
+
+  function drawCircle(parent, cx,cy,r, opts){
+    const c = document.createElementNS(SVGNS, 'circle');
+    setAttrs(c, {
+      cx, cy, r,
+      fill: opts.fill != null ? opts.fill : 'none',
+      stroke: opts.stroke || 'none',
+      'stroke-width': opts.width || 1,
+      opacity: opts.opacity != null ? opts.opacity : 1,
+    });
+    if(opts.dash) c.setAttribute('stroke-dasharray', opts.dash);
+    if(opts.className) c.setAttribute('class', opts.className);
+    parent.appendChild(c);
+    return c;
+  }
+
+  function drawPolygon(parent, points, opts){
+    const p = document.createElementNS(SVGNS, 'polygon');
+    p.setAttribute('points', points.map(pt => pt[0]+','+pt[1]).join(' '));
+    setAttrs(p, {
+      fill: opts.fill != null ? opts.fill : 'none',
+      stroke: opts.stroke || 'none',
+      'stroke-width': opts.width || 1,
+      opacity: opts.opacity != null ? opts.opacity : 1,
+    });
+    if(opts.linejoin) p.setAttribute('stroke-linejoin', opts.linejoin);
+    if(opts.className) p.setAttribute('class', opts.className);
+    parent.appendChild(p);
+    return p;
+  }
+
+  function shipPoints(cx, cy, r, facingRight){
+    if(facingRight){
+      return [[cx+r,cy], [cx-r*0.55,cy-r*0.8], [cx-r*0.25,cy], [cx-r*0.55,cy+r*0.8]];
+    }
+    return [[cx-r,cy], [cx+r*0.55,cy-r*0.8], [cx+r*0.25,cy], [cx+r*0.55,cy+r*0.8]];
+  }
+
+  // 旗艦（王）用明顯不同的六角艦體造型，一封王就能馬上認出來
+  function kingShipPoints(cx, cy, r, facingRight){
+    const dir = facingRight ? 1 : -1;
+    return [
+      [cx+dir*r*1.25, cy],
+      [cx+dir*r*0.35, cy-r*0.95],
+      [cx-dir*r*0.9,  cy-r*0.55],
+      [cx-dir*r*0.5,  cy],
+      [cx-dir*r*0.9,  cy+r*0.55],
+      [cx+dir*r*0.35, cy+r*0.95]
+    ];
+  }
+
+  function pointSegDist(px,py, x1,y1,x2,y2){
+    const dx = x2-x1, dy = y2-y1;
+    const lenSq = dx*dx + dy*dy;
+    let t = lenSq === 0 ? 0 : ((px-x1)*dx + (py-y1)*dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    const cx = x1 + t*dx, cy = y1 + t*dy;
+    return Math.hypot(px-cx, py-cy);
+  }
+
+  // 純粹依拖曳算出「意圖」方向與力道，不含誤差 —— 只用來畫瞄準參考線
+  function computeAim(piece, pointer){
+    const dx = pointer.x - piece.x, dy = pointer.y - piece.y;
+    const dragDist = Math.hypot(dx, dy);
+    if(dragDist < 1e-6) return null;
+    const dragClamped = Math.min(dragDist, MAX_DRAG);
+    const f = dragClamped / MAX_DRAG;
+    const shotLen = MIN_SHOT + f * (MAX_SHOT - MIN_SHOT);
+    const dirX = -dx/dragDist, dirY = -dy/dragDist;
+    return { dragDist, f, shotLen, dirX, dirY };
+  }
+
+  // 力道越大，方向誤差越大 —— 模擬手指彈筆時難以精準控制的手感
+  function applyAngleError(dirX, dirY, f){
+    const maxErrDeg = MIN_ANGLE_ERR + f * (MAX_ANGLE_ERR - MIN_ANGLE_ERR);
+    const errDeg = (Math.random() * 2 - 1) * maxErrDeg;
+    const a = errDeg * Math.PI / 180;
+    const cosA = Math.cos(a), sinA = Math.sin(a);
+    return { dirX: dirX*cosA - dirY*sinA, dirY: dirX*sinA + dirY*cosA };
+  }
+
+  function clipToBoard(piece, dirX, dirY, shotLen){
+    const minX = DOT_R, maxX = BOARD_W - DOT_R, minY = DOT_R, maxY = BOARD_H - DOT_R;
+    let sMaxX = Infinity, sMaxY = Infinity;
+    if(dirX > 0) sMaxX = (maxX - piece.x) / dirX;
+    else if(dirX < 0) sMaxX = (minX - piece.x) / dirX;
+    if(dirY > 0) sMaxY = (maxY - piece.y) / dirY;
+    else if(dirY < 0) sMaxY = (minY - piece.y) / dirY;
+    const wallLimit = Math.min(sMaxX, sMaxY);
+    const sFinal = Math.max(0, Math.min(shotLen, wallLimit));
+    const hitWall = wallLimit < shotLen - 0.5; // 力道超過紙張邊界，衝出去了
+    return { endX: piece.x + dirX*sFinal, endY: piece.y + dirY*sFinal, hitWall };
+  }
+
+  // 真正發射時才套用角度誤差 —— 拖曳預覽階段看不到這個結果
+  function computeFinalShot(piece, pointer){
+    const aim = computeAim(piece, pointer);
+    if(!aim) return null;
+    const err = applyAngleError(aim.dirX, aim.dirY, aim.f);
+    const clip = clipToBoard(piece, err.dirX, err.dirY, aim.shotLen);
+    return { dragDist: aim.dragDist, endX: clip.endX, endY: clip.endY, hitWall: clip.hitWall };
+  }
+
+  function isValidPlacement(x, y, owner){
+    if(y < EDGE_MARGIN || y > BOARD_H - EDGE_MARGIN) return false;
+    if(owner === 1){
+      if(x < EDGE_MARGIN || x > CENTER_X - CENTER_MARGIN) return false;
+    } else {
+      if(x < CENTER_X + CENTER_MARGIN || x > BOARD_W - EDGE_MARGIN) return false;
+    }
+    for(const p of state.pieces){
+      if(Math.hypot(p.x-x, p.y-y) < MIN_GAP) return false;
+    }
+    return true;
+  }
+
+  function toBoardPoint(e){
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    const ctm = svg.getScreenCTM();
+    const inv = ctm.inverse();
+    const p = pt.matrixTransform(inv);
+    return { x: p.x, y: p.y };
+  }
+
+  let flashTimer = null;
+  function flashStatus(msg){
+    statusText.textContent = msg;
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(render, 1400);
+  }
+
+  function handleSetupClick(pt){
+    const owner = state.phase === 'setup1' ? 1 : 2;
+    if(!isValidPlacement(pt.x, pt.y, owner)){
+      flashStatus('位置太擠或超出己方區域，換個地方試試');
+      return;
+    }
+    const id = nextIdFor(owner);
+    state.pieces.push({ id, x: pt.x, y: pt.y, owner, alive: true, lives: 1, king: false });
+    const count = state.pieces.filter(p => p.owner === owner).length;
+    if(count >= 10){
+      if(owner === 1){ state.phase = 'king1'; }
+      else { state.phase = 'king2'; }
+    }
+    sendMsg({ type:'place', id, owner, x: pt.x, y: pt.y });
+    render();
+  }
+
+  function handleKingSelect(piece){
+    if(!canActOn(piece.owner)){ flashStatus('還沒輪到你選王'); return; }
+    piece.king = true;
+    piece.lives = 2;
+    sendMsg({ type:'king', id: piece.id, owner: piece.owner });
+    if(piece.owner === 1){ state.phase = 'setup2'; }
+    else { state.phase = 'playing'; state.turn = 1; }
+    render();
+  }
+
+  function applyShotEffect(payload){
+    const piece = state.pieces.find(p => p.id === payload.pieceId);
+    if(piece){
+      piece.x = payload.endX; piece.y = payload.endY;
+      if(payload.selfDeath){ piece.alive = false; piece.lives = 0; }
+    }
+    const hits = payload.hitIds || [];
+    hits.forEach(hid => {
+      const op = state.pieces.find(p => p.id === hid);
+      if(op){
+        op.lives = (op.lives == null ? 1 : op.lives) - 1;
+        if(op.lives <= 0){ op.alive = false; }
+      }
+    });
+    state.traces.push({ x1:payload.startX, y1:payload.startY, x2:payload.endX, y2:payload.endY, color: colorFor(payload.owner) });
+    const owner = payload.owner;
+    const opponent = owner === 1 ? 2 : 1;
+    state.turn = opponent;
+    if(payload.baseWin && piece && piece.alive){
+      state.phase = 'over';
+      state.winner = owner;
+      return;
+    }
+    const ownerAlive = state.pieces.some(p => p.owner === owner && p.alive);
+    const oppAlive = state.pieces.some(p => p.owner === opponent && p.alive);
+    if(!oppAlive){
+      state.phase = 'over';
+      state.winner = owner;
+    } else if(!ownerAlive){
+      state.phase = 'over';
+      state.winner = opponent;
+    }
+  }
+
+  function finalizeShot(piece, pointer){
+    const shot = computeFinalShot(piece, pointer);
+    if(!shot || shot.dragDist < 8){ return; }
+    const startX = piece.x, startY = piece.y;
+    const endX = shot.endX, endY = shot.endY;
+    const opponent = piece.owner === 1 ? 2 : 1;
+    const hitIds = [];
+    state.pieces.forEach(op => {
+      if(op.owner === opponent && op.alive){
+        const d = pointSegDist(op.x, op.y, startX, startY, endX, endY);
+        if(d <= HIT_R){ hitIds.push(op.id); }
+      }
+    });
+    const targetBase = piece.owner === 1 ? RED_BASE : BLUE_BASE;
+    const baseWin = Math.hypot(endX-targetBase.x, endY-targetBase.y) <= BASE_R;
+    const inHazard = !baseWin && Math.abs(endX-CENTER_X) <= HAZARD_HALF_WIDTH;
+    const selfDeath = shot.hitWall || inHazard;
+    const payload = { type:'shot', pieceId: piece.id, startX, startY, endX, endY, hitIds, owner: piece.owner, selfDeath, baseWin };
+    applyShotEffect(payload);
+    sendMsg(payload);
+    render();
+    if(shot.hitWall){ flashStatus('力道過猛，衝進邊界的黑洞消失了！'); }
+    else if(inHazard){ flashStatus('墜入中央的小行星帶，船報銷了！'); }
+    else if(baseWin){ flashStatus('攻進對方基地，奇襲成功！'); }
+  }
+
+  function updatePreview(piece, pointer){
+    previewLayer.innerHTML = '';
+    const aim = computeAim(piece, pointer);
+    if(!aim) return;
+    const col = colorFor(piece.owner);
+    // 拖曳方向的示意線（固定長度，不代表真正力道／落點／是否命中）
+    const guideLen = 40;
+    const gx = piece.x + aim.dirX*guideLen, gy = piece.y + aim.dirY*guideLen;
+    drawLine(previewLayer, piece.x, piece.y, pointer.x, pointer.y, { stroke: col, width:1.5, dash:'3 5', opacity:0.35 });
+    drawLine(previewLayer, piece.x, piece.y, gx, gy, { stroke: col, width:2.5, opacity:0.55, linecap:'round' });
+  }
+
+  function canActOn(owner){
+    return (!networked) || (myRole === owner);
+  }
+
+  function onSvgPointerDown(e){
+    if(!state || state.phase === 'over') return;
+    const pt = toBoardPoint(e);
+    const pieceGroup = e.target.closest('[data-piece-id]');
+    if(pieceGroup && (state.phase === 'playing' || state.phase === 'king1' || state.phase === 'king2')){
+      const id = pieceGroup.getAttribute('data-piece-id');
+      const piece = state.pieces.find(p => p.id === id);
+      if(!piece || !piece.alive){ return; }
+      if(state.phase === 'king1' && piece.owner === 1){
+        handleKingSelect(piece);
+        e.preventDefault();
+        return;
+      }
+      if(state.phase === 'king2' && piece.owner === 2){
+        handleKingSelect(piece);
+        e.preventDefault();
+        return;
+      }
+      if(state.phase === 'playing' && piece.owner === state.turn && canActOn(piece.owner)){
+        dragging = { piece };
+        window.addEventListener('pointermove', onDragMove);
+        window.addEventListener('pointerup', onDragEnd, { once:true });
+        e.preventDefault();
+      }
+      return;
+    }
+    if(!pieceGroup && (state.phase === 'setup1' || state.phase === 'setup2')){
+      const owner = state.phase === 'setup1' ? 1 : 2;
+      if(canActOn(owner)){
+        handleSetupClick(pt);
+      } else {
+        flashStatus('還沒輪到你放置');
+      }
+    }
+  }
+
+  function onDragMove(e){
+    if(!dragging) return;
+    const pt = toBoardPoint(e);
+    updatePreview(dragging.piece, pt);
+  }
+
+  function onDragEnd(e){
+    window.removeEventListener('pointermove', onDragMove);
+    if(!dragging){ previewLayer.innerHTML=''; return; }
+    const pt = toBoardPoint(e);
+    finalizeShot(dragging.piece, pt);
+    dragging = null;
+    previewLayer.innerHTML = '';
+  }
+
+  function render(){
+    tracesLayer.innerHTML = '';
+    piecesLayer.innerHTML = '';
+
+    state.traces.forEach(t => {
+      drawLine(tracesLayer, t.x1, t.y1, t.x2, t.y2, { stroke:t.color, width:3, opacity:0.85, linecap:'round' });
+    });
+
+    state.pieces.forEach(p => {
+      const g = document.createElementNS(SVGNS, 'g');
+      g.setAttribute('data-piece-id', p.id);
+      if(p.alive){
+        const isSelectable = (state.phase === 'playing' && p.owner === state.turn && canActOn(p.owner))
+          || (state.phase === 'king1' && p.owner === 1 && canActOn(1))
+          || (state.phase === 'king2' && p.owner === 2 && canActOn(2));
+        const col = colorFor(p.owner);
+        const facingRight = p.owner === 1;
+        const shipR = p.king ? DOT_R*1.7 : DOT_R;
+        if(isSelectable){
+          drawCircle(g, p.x, p.y, shipR+7, { stroke: col, width:1.5, dash:'3 4', className:'select-ring' });
+        }
+        if(p.king){
+          drawCircle(g, p.x, p.y, shipR+5, { stroke: col, width:1.4, opacity:0.8 });
+          if(p.lives >= 2){
+            drawCircle(g, p.x, p.y, shipR+10, { stroke: col, width:1.2, opacity:0.5 });
+          }
+        }
+        drawPolygon(g, p.king ? kingShipPoints(p.x, p.y, shipR, facingRight) : shipPoints(p.x, p.y, shipR, facingRight),
+          { fill: p.king ? (p.owner===1 ? 'rgba(79,195,255,0.28)' : 'rgba(255,107,107,0.28)') : '#f4f8ff', stroke: col, width:2.2, linejoin:'round' });
+        const hit = drawCircle(g, p.x, p.y, shipR+12, { fill:'rgba(0,0,0,0)' });
+        hit.setAttribute('class', 'hit-area' + (isSelectable ? ' grabbable' : ''));
+      } else {
+        drawCircle(g, p.x, p.y, DOT_R, { fill:'rgba(255,255,255,0.05)', stroke:'rgba(255,255,255,0.3)', width:1.5, dash:'2 3' });
+        drawLine(g, p.x-7, p.y-7, p.x+7, p.y+7, { stroke:'#ff6b6b', width:2, opacity:0.7 });
+        drawLine(g, p.x-7, p.y+7, p.x+7, p.y-7, { stroke:'#ff6b6b', width:2, opacity:0.7 });
+      }
+      piecesLayer.appendChild(g);
+    });
+
+    updateStatusUI();
+  }
+
+  function updateStatusUI(){
+    const c1 = state.pieces.filter(p => p.owner === 1 && p.alive).length;
+    const c2 = state.pieces.filter(p => p.owner === 2 && p.alive).length;
+    count1El.textContent = c1;
+    count2El.textContent = c2;
+
+    const showZones = state.phase === 'setup1' || state.phase === 'setup2';
+    labelBlue.classList.toggle('show', showZones);
+    labelRed.classList.toggle('show', showZones);
+
+    let myTag = '';
+    if(networked){ myTag = myRole === 1 ? '（你是藍方）' : '（你是紅方）'; }
+
+    if(state.phase === 'setup1'){
+      const n = state.pieces.filter(p => p.owner===1).length;
+      statusText.textContent = `藍方請在左半邊點擊放置棋子（${n}/10）${myTag}`;
+      turnDot.style.background = 'var(--ink-blue)';
+    } else if(state.phase === 'king1'){
+      statusText.textContent = `藍方請點選一顆棋子封為王（雙重生命）${myTag}`;
+      turnDot.style.background = 'var(--ink-blue)';
+    } else if(state.phase === 'setup2'){
+      const n = state.pieces.filter(p => p.owner===2).length;
+      statusText.textContent = `紅方請在右半邊點擊放置棋子（${n}/10）${myTag}`;
+      turnDot.style.background = 'var(--ink-red)';
+    } else if(state.phase === 'king2'){
+      statusText.textContent = `紅方請點選一顆棋子封為王（雙重生命）${myTag}`;
+      turnDot.style.background = 'var(--ink-red)';
+    } else if(state.phase === 'playing'){
+      statusText.textContent = (state.turn === 1 ? '藍方回合' : '紅方回合') + ' — 拖曳你的棋子瞄準，放開發射！' + myTag;
+      turnDot.style.background = state.turn === 1 ? 'var(--ink-blue)' : 'var(--ink-red)';
+    } else if(state.phase === 'over'){
+      statusText.textContent = (state.winner === 1 ? '藍方' : '紅方') + ' 獲勝！';
+      turnDot.style.background = state.winner === 1 ? 'var(--ink-blue)' : 'var(--ink-red)';
+    }
+
+    if(state.phase === 'over'){
+      winnerOverlay.classList.add('active');
+      stampCard.className = 'stamp-card ' + (state.winner === 1 ? 'p1' : 'p2');
+      stampTitle.textContent = (state.winner === 1 ? '藍方' : '紅方') + ' 獲勝！';
+    } else {
+      winnerOverlay.classList.remove('active');
+    }
+  }
+
+  function resetLocalState(){
+    state = freshState();
+    dragging = null;
+    localIdCounters = { 1:0, 2:0 };
+    previewLayer.innerHTML = '';
+  }
+
+  function restart(){
+    resetLocalState();
+    render();
+    sendMsg({ type:'restart' });
+  }
+
+  svg.addEventListener('pointerdown', onSvgPointerDown);
+  document.getElementById('restartBtn').addEventListener('click', restart);
+  document.getElementById('restartBtn2').addEventListener('click', restart);
+
+  drawStars();
+  drawHazardAndBases();
+  state = freshState();
+})();
+</script>
+</body>
+</html>
