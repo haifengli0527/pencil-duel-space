@@ -101,6 +101,7 @@
   .join-row{ display:flex; gap:8px; }
   #joinCodeInput{
     flex:1;
+    min-width:0;
     font-family:'Noto Sans TC', sans-serif;
     font-size:1.1rem;
     letter-spacing:3px;
@@ -488,7 +489,13 @@
     p.on('connection', c => {
       conn = c;
       setupConnHandlers();
+      // 有人嘗試加入了，但連線一直沒建立成功時給個提示，而不是靜靜卡住
+      const acceptTimeout = setTimeout(() => {
+        setCreateStatus('<span class="error-text">有人嘗試加入，但連線一直沒建立成功，可能是網路環境擋掉了直連。請對方再試一次，或換個網路（例如手機熱點）</span>');
+        try{ conn.close(); }catch(e){}
+      }, 15000);
       conn.on('open', () => {
+        clearTimeout(acceptTimeout);
         networked = true; myRole = 1;
         enterGame();
       });
@@ -514,17 +521,25 @@
     try{ p = new Peer(undefined, { config: ICE_CONFIG }); }
     catch(err){ setJoinStatus('<span class="error-text">連線失敗，請重新整理頁面再試</span>'); return; }
 
+    // 連線逾時保護：避免永遠卡在「連線中」卻沒有任何提示
+    const connectTimeout = setTimeout(() => {
+      setJoinStatus('<span class="error-text">連線逾時，可能是雙方網路環境擋掉了直連，或訊號伺服器不穩。可以再試一次，或換個網路（例如手機熱點）試試</span>');
+      try{ p.destroy(); }catch(e){}
+    }, 15000);
+
     p.on('open', () => {
       peer = p;
       const c = p.connect(roomIdFor(codeRaw), { reliable:true });
       conn = c;
       setupConnHandlers();
       conn.on('open', () => {
+        clearTimeout(connectTimeout);
         networked = true; myRole = 2;
         enterGame();
       });
     });
-    p.on('error', () => {
+    p.on('error', err => {
+      clearTimeout(connectTimeout);
       setJoinStatus('<span class="error-text">找不到這個房間，確認代碼是否正確</span>');
     });
   }
