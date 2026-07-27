@@ -487,6 +487,7 @@
     p.on('connection', c => {
       conn = c;
       setupConnHandlers();
+      watchIceState(conn, setCreateStatus, '有人正在嘗試加入');
       // 有人嘗試加入了，但連線一直沒建立成功時給個提示，而不是靜靜卡住
       const acceptTimeout = setTimeout(() => {
         setCreateStatus('<span class="error-text">有人嘗試加入，但連線一直沒建立成功，可能是網路環境擋掉了直連。請對方再試一次，或換個網路（例如手機熱點）</span>');
@@ -530,6 +531,7 @@
       const c = p.connect(roomIdFor(codeRaw), { reliable:true });
       conn = c;
       setupConnHandlers();
+      watchIceState(conn, setJoinStatus, '連線中…');
       conn.on('open', () => {
         clearTimeout(connectTimeout);
         networked = true; myRole = 2;
@@ -546,6 +548,36 @@
     conn.on('data', handleRemoteMessage);
     conn.on('close', () => { netStatusEl.textContent = '對方已離線'; });
     conn.on('error', () => { netStatusEl.textContent = '連線發生問題'; });
+  }
+
+  // 把瀏覽器內部的 WebRTC ICE 連線狀態直接顯示在畫面上，不用打開開發者工具就看得到
+  // （Chrome 不會像 Firefox 一樣把 ICE failed 印在 console，手機上更是沒有 console 可看）
+  const ICE_STATE_LABEL = {
+    'new': '準備中',
+    'checking': '正在嘗試建立直連',
+    'connected': '已連線',
+    'completed': '已連線',
+    'failed': '直連失敗（可能是雙方網路環境擋掉了 P2P）',
+    'disconnected': '連線中斷',
+    'closed': '已關閉'
+  };
+  function watchIceState(conn, setStatus, baseMsg){
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries++;
+      const pc = conn && conn.peerConnection;
+      if(pc){
+        clearInterval(timer);
+        const report = () => {
+          const label = ICE_STATE_LABEL[pc.iceConnectionState] || pc.iceConnectionState;
+          setStatus(baseMsg + '（目前狀態：' + label + '）');
+        };
+        pc.addEventListener('iceconnectionstatechange', report);
+        report();
+      } else if(tries > 40){
+        clearInterval(timer);
+      }
+    }, 250);
   }
 
   function sendMsg(msg){
