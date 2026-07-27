@@ -515,23 +515,35 @@
     }
     const codeRaw = document.getElementById('joinCodeInput').value.trim().toUpperCase();
     if(!codeRaw){ setJoinStatus('<span class="error-text">請輸入房間代碼</span>'); return; }
-    setJoinStatus('連線中…');
+    setJoinStatus('連線中…（正在連上訊號伺服器）');
     let p;
     try{ p = new Peer(undefined, { config: ICE_CONFIG }); }
     catch(err){ setJoinStatus('<span class="error-text">連線失敗，請重新整理頁面再試</span>'); return; }
 
-    // 連線逾時保護：避免永遠卡在「連線中」卻沒有任何提示
-    const connectTimeout = setTimeout(() => {
-      setJoinStatus('<span class="error-text">連線逾時，可能是雙方網路環境擋掉了直連，或訊號伺服器不穩。可以再試一次，或換個網路（例如手機熱點）試試</span>');
+    let brokerOpened = false;
+
+    // 第一階段：連上 PeerJS 的訊號伺服器本身，這一步跟房主、跟 NAT/TURN 都還沒關係
+    const brokerTimeout = setTimeout(() => {
+      setJoinStatus('<span class="error-text">連不上「訊號伺服器」，還沒進到跟房主連線的階段。可能是這個網路環境（防火牆、公司/學校網路）擋住了，或伺服器暫時不穩。可以換個網路（例如手機熱點）試試，或稍後再試</span>');
       try{ p.destroy(); }catch(e){}
-    }, 15000);
+    }, 8000);
 
     p.on('open', () => {
+      brokerOpened = true;
+      clearTimeout(brokerTimeout);
       peer = p;
+      setJoinStatus('連線中…（已連上訊號伺服器，正在連線房主）');
+
+      // 第二階段：跟房主之間真正建立 P2P 連線
+      const connectTimeout = setTimeout(() => {
+        setJoinStatus('<span class="error-text">已經連上訊號伺服器，但跟房主之間一直連不起來，可能是雙方網路環境擋掉了直連。可以再試一次，或換個網路試試</span>');
+        try{ p.destroy(); }catch(e){}
+      }, 15000);
+
       const c = p.connect(roomIdFor(codeRaw), { reliable:true });
       conn = c;
       setupConnHandlers();
-      watchIceState(conn, setJoinStatus, '連線中…');
+      watchIceState(conn, setJoinStatus, '連線中…（正在連線房主）');
       conn.on('open', () => {
         clearTimeout(connectTimeout);
         networked = true; myRole = 2;
@@ -539,8 +551,12 @@
       });
     });
     p.on('error', err => {
-      clearTimeout(connectTimeout);
-      setJoinStatus('<span class="error-text">找不到這個房間，確認代碼是否正確</span>');
+      clearTimeout(brokerTimeout);
+      if(!brokerOpened){
+        setJoinStatus('<span class="error-text">連不上訊號伺服器，請確認網路連線，或換個網路再試</span>');
+      } else {
+        setJoinStatus('<span class="error-text">找不到這個房間，確認代碼是否正確</span>');
+      }
     });
   }
 
