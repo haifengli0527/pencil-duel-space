@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1/dist/peerjs.min.js"></script>
+
 <style>
   :root{
     --space-0:#03040c;
@@ -268,7 +268,7 @@
       <button class="btn" id="startLocalBtn" type="button">開始本機對戰</button>
     </div>
     <div class="tab-panel" id="panel-create" hidden>
-      <p class="lobby-desc">建立房間後會拿到一組代碼，傳給朋友（LINE、簡訊都行），他輸入代碼加入後就會自動開始。這是點對點直連，不用註冊帳號，但少數嚴格的網路環境可能連不上。</p>
+      <p class="lobby-desc">建立房間後會拿到一組代碼，傳給朋友（LINE、簡訊都行），他輸入代碼加入後就會自動開始。透過免費公開中繼伺服器轉送，不用註冊帳號，一般 NAT / 4G/5G 行動網路也連得上。</p>
       <button class="btn" id="createRoomBtn" type="button">建立房間</button>
       <div id="createStatus" class="lobby-status"></div>
     </div>
@@ -377,15 +377,127 @@
   const BASE_INSET = 34;         // 基地離該方最外側邊界的距離
   const BLUE_BASE = { x: EDGE_MARGIN + BASE_INSET, y: BOARD_H/2 };
   const RED_BASE = { x: BOARD_W - EDGE_MARGIN - BASE_INSET, y: BOARD_H/2 };
-  // 目前僅用 STUN，沒有 TURN 轉發伺服器：嚴格 NAT / 行動網路 / 對稱型 NAT 環境下可能連不上，
-  // 詳見 README「已知限制」。之前掛的免費公用 TURN（Open Relay Project）經實測已完全失效，故先移除。
-  const ICE_CONFIG = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:global.stun.twilio.com:3478' }
-    ]
-  };
+  // ---- 中繼傳輸（MQTT over WebSocket，零依賴、零金鑰）----
+  // 原本的 PeerJS WebRTC 直連改成「免費公開 MQTT broker 中繼」：
+  // 只要瀏覽器能開 WSS 443（任何 NAT / 4G/5G CGNAT 都擋不住），就保證能連。
+  // 不需要 TURN、不需要註冊帳號、不需要任何金鑰。
+  // 注意：公開 broker 無 SLA、會對單一 IP 限流，但一局只有 2 條連線，不會撞到。
+  const MQTT_BROKERS = [
+    'wss://broker.hivemq.com:8884/mqtt',
+    'wss://broker.emqx.io:8084/mqtt'
+  ];
   const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+  // ---------- Minimal MQTT 3.1.1 client over WebSocket ----------
+  const mqttEnc = new TextEncoder();
+  const mqttDec = new TextDecoder();
+  function mqttRemainingLen(n){
+    // MQTT remaining length 是 varint：每 byte 7 bits，MSB=續位。n>=128 時必須多 byte。
+    const out = [];
+    do {
+      let b = n % 128;
+      n = Math.floor(n / 128);
+      if(n > 0) b |= 0x80;
+      out.push(b);
+    } while(n > 0);
+    return out;
+  }
+  function mqttPacketConnect(clientId){
+    // fixed 0x10, clean session, keepalive 45s (0x002D)
+    const vh = [0x00,0x04,0x4D,0x51,0x54,0x54, 0x04, 0x02, 0x00, 0x2D];
+    const idBytes = mqttEnc.encode(clientId);
+    const body = vh.concat([(idBytes.length>>8)&0xFF, idBytes.length&0xFF, ...idBytes]);
+    return new Uint8Array([0x10, ...mqttRemainingLen(body.length), ...body]);
+  }
+  function mqttPacketSubscribe(topic, pid){
+    const tBytes = mqttEnc.encode(topic);
+    const body = [0x00, pid, (tBytes.length>>8)&0xFF, tBytes.length&0xFF, ...tBytes, 0x00];
+    return new Uint8Array([0x82, ...mqttRemainingLen(body.length), ...body]);
+  }
+  function mqttPacketPublish(topic, payload){
+    // QoS 0 PUBLISH: body = topic_len(2) + topic + payload_len(2) + payload（沒有 packet id）
+    const tBytes = mqttEnc.encode(topic);
+    const mBytes = mqttEnc.encode(payload);
+    const body = [(tBytes.length>>8)&0xFF, tBytes.length&0xFF, ...tBytes, (mBytes.length>>8)&0xFF, mBytes.length&0xFF, ...mBytes];
+    return new Uint8Array([0x30, ...mqttRemainingLen(body.length), ...body]);
+  }
+  function mqttData(ev){
+    const d = ev.data;
+    if(d instanceof ArrayBuffer) return Promise.resolve(new Uint8Array(d));
+    if(d instanceof Blob) return d.arrayBuffer().then(b => new Uint8Array(b));
+    return Promise.reject(new Error('unexpected ws data type'));
+  }
+  function mqttConnect(brokerUrl){
+    return new Promise((resolve, reject) => {
+      let ws;
+      try{ ws = new WebSocket(brokerUrl); }
+      catch(err){ reject(err); return; }
+      ws.binaryType = 'arraybuffer';
+      const client = { ws, handlers: [], onDisconnect: null, pingTimer: null };
+      let done = false;
+      const tmo = setTimeout(() => fail('timeout'), 8000);
+      function fail(msg){
+        if(done) return;
+        done = true; clearTimeout(tmo);
+        try{ ws.close(); }catch(e){}
+        reject(new Error(msg));
+      }
+      ws.onopen = () => ws.send(mqttPacketConnect('pd' + Math.random().toString(36).slice(2, 10)));
+      ws.onmessage = ev => mqttData(ev).then(a => {
+        if(a[0] === 0x20 && a[1] === 0x02){ // CONNACK
+          if(a[3] !== 0){ fail('broker refused'); return; }
+          if(done) return;
+          done = true; clearTimeout(tmo);
+          resolve(client);
+        } else if(a[0] === 0x30){ // PUBLISH (QoS 0): skip varint remaining length, then topic + payload
+          let i = 1, mult = 1, rl = 0;
+          do { rl += (a[i] & 0x7F) * mult; mult *= 128; i++; } while(a[i-1] & 0x80);
+          const tl = (a[i]<<8)|a[i+1]; i += 2;
+          const topic = mqttDec.decode(a.slice(i, i+tl));
+          const plen = (a[i+tl]<<8)|a[i+tl+1];
+          const payload = mqttDec.decode(a.slice(i+tl+2, i+tl+2+plen));
+          client.handlers.forEach(h => { try{ h(topic, payload); }catch(e){} });
+        }
+        // 0x90 SUBACK / 0xD0 PINGRESP: ignore here
+      }).catch(() => {});
+      ws.onclose = () => { if(!done){ fail('closed'); } else if(client.onDisconnect){ client.onDisconnect(); } };
+      ws.onerror = () => { if(!done){ fail('ws-error'); } };
+    });
+  }
+  function mqttSubscribe(client, topic){
+    return new Promise((resolve, reject) => {
+      const pid = 1;
+      const tmo = setTimeout(() => reject(new Error('suback timeout')), 8000);
+      const onSub = ev => mqttData(ev).then(a => {
+        if(a[0] !== 0x90) return;
+        let i = 1;
+        while(a[i] & 0x80){ i++; }
+        i++;
+        const gotPid = (a[i]<<8)|a[i+1];
+        if(gotPid === pid){
+          clearTimeout(tmo);
+          client.ws.removeEventListener('message', onSub);
+          resolve();
+        }
+      }).catch(() => {});
+      client.ws.addEventListener('message', onSub);
+      client.ws.send(mqttPacketSubscribe(topic, pid));
+    });
+  }
+  function mqttStartPing(client){
+    client.pingTimer = setInterval(() => {
+      if(client.ws.readyState === WebSocket.OPEN){ client.ws.send(new Uint8Array([0xC0, 0x00])); }
+    }, 30000);
+  }
+  function mqttClose(client){
+    if(client.pingTimer){ clearInterval(client.pingTimer); client.pingTimer = null; }
+    try{ client.ws.close(); }catch(e){}
+  }
+  function mqttConnectAny(idx){
+    idx = idx || 0;
+    if(idx >= MQTT_BROKERS.length) return Promise.reject(new Error('all brokers failed'));
+    return mqttConnect(MQTT_BROKERS[idx]).catch(() => mqttConnectAny(idx + 1));
+  }
 
   const svg = document.getElementById('board');
   const tracesLayer = document.getElementById('tracesLayer');
@@ -414,10 +526,11 @@
   let localIdCounters = { 1:0, 2:0 };
 
   // --- Networking state ---
-  let peer = null;
-  let conn = null;
-  let myRole = null;      // 1 = host/blue, 2 = joiner/red, null = local hot-seat
+  let mqttClient = null;   // MQTT relay 連線
+  let roomTopic = null;    // pencilduel/{code}/game
+  let myRole = null;       // 1 = host/blue, 2 = joiner/red, null = local hot-seat
   let networked = false;
+  let joinTimeout = null;
 
   function nextIdFor(owner){
     localIdCounters[owner] += 1;
@@ -453,155 +566,108 @@
     for(let i=0;i<len;i++) s += CODE_CHARS[Math.floor(Math.random()*CODE_CHARS.length)];
     return s;
   }
-  function roomIdFor(code){ return 'pencilduel-' + code; }
+  function roomTopicFor(code){ return 'pencilduel/' + code + '/game'; }
 
   function setCreateStatus(html){ document.getElementById('createStatus').innerHTML = html; }
   function setJoinStatus(html){ document.getElementById('joinStatus').innerHTML = html; }
 
-  function createRoom(attemptsLeft){
-    if(typeof Peer === 'undefined'){
-      setCreateStatus('<span class="error-text">無法載入連線功能，請檢查網路連線或換個瀏覽器再試</span>');
-      return;
-    }
-    attemptsLeft = (attemptsLeft == null) ? 5 : attemptsLeft;
+  function createRoom(){
     const code = genCode(5);
-    setCreateStatus('建立中…');
-    let p;
-    try{ p = new Peer(roomIdFor(code), { config: ICE_CONFIG }); }
-    catch(err){ setCreateStatus('<span class="error-text">建立房間失敗，請重新整理頁面再試</span>'); return; }
-
-    p.on('open', () => {
-      peer = p;
-      setCreateStatus(
-        '房間代碼：<span class="room-code">' + code + '</span>' +
-        '<button class="btn copy-btn" id="copyCodeBtn" type="button">複製</button>' +
-        '<div class="waiting-line">等待朋友加入<span class="dots"></span></div>'
-      );
-      const copyBtn = document.getElementById('copyCodeBtn');
-      if(copyBtn){
-        copyBtn.addEventListener('click', () => {
-          if(navigator.clipboard){ navigator.clipboard.writeText(code).catch(() => {}); }
-        });
-      }
-    });
-    p.on('connection', c => {
-      conn = c;
-      setupConnHandlers();
-      watchIceState(conn, setCreateStatus, '有人正在嘗試加入');
-      // 有人嘗試加入了，但連線一直沒建立成功時給個提示，而不是靜靜卡住
-      const acceptTimeout = setTimeout(() => {
-        setCreateStatus('<span class="error-text">有人嘗試加入，但連線一直沒建立成功，可能是網路環境擋掉了直連。請對方再試一次，或換個網路（例如手機熱點）</span>');
-        try{ conn.close(); }catch(e){}
-      }, 15000);
-      conn.on('open', () => {
-        clearTimeout(acceptTimeout);
-        networked = true; myRole = 1;
-        enterGame();
+    setCreateStatus('建立中…（連上中繼伺服器）');
+    roomTopic = roomTopicFor(code);
+    mqttConnectAny().then(c => {
+      mqttClient = c;
+      mqttClient.handlers.push((topic, payload) => {
+        if(topic !== roomTopic) return;
+        let msg; try{ msg = JSON.parse(payload); }catch(e){ return; }
+        handleRemoteMessage(msg);
       });
-    });
-    p.on('error', err => {
-      if(err && err.type === 'unavailable-id' && attemptsLeft > 0){
-        createRoom(attemptsLeft - 1);
-      } else {
-        setCreateStatus('<span class="error-text">建立房間失敗，請重新整理頁面再試一次</span>');
-      }
+      return mqttSubscribe(mqttClient, roomTopic).then(() => {
+        mqttStartPing(mqttClient);
+        mqttClient.onDisconnect = () => {
+          if(networked){ netStatusEl.textContent = '連線中斷，重新整理頁面可重連'; }
+          else { setCreateStatus('<span class="error-text">連上中繼後連線中斷，請重新整理頁面再試</span>'); }
+        };
+        setCreateStatus(
+          '房間代碼：<span class="room-code">' + code + '</span>' +
+          '<button class="btn copy-btn" id="copyCodeBtn" type="button">複製</button>' +
+          '<div class="waiting-line">等待朋友加入<span class="dots"></span></div>'
+        );
+        const copyBtn = document.getElementById('copyCodeBtn');
+        if(copyBtn){
+          copyBtn.addEventListener('click', () => {
+            if(navigator.clipboard){ navigator.clipboard.writeText(code).catch(() => {}); }
+          });
+        }
+      });
+    }).catch(() => {
+      setCreateStatus('<span class="error-text">連不上中繼伺服器（免費公開 MQTT broker），請確認網路連線，或稍後再試</span>');
     });
   }
 
   function joinRoom(){
-    if(typeof Peer === 'undefined'){
-      setJoinStatus('<span class="error-text">無法載入連線功能，請檢查網路連線或換個瀏覽器再試</span>');
-      return;
-    }
     const codeRaw = document.getElementById('joinCodeInput').value.trim().toUpperCase();
     if(!codeRaw){ setJoinStatus('<span class="error-text">請輸入房間代碼</span>'); return; }
-    setJoinStatus('連線中…（正在連上訊號伺服器）');
-    let p;
-    try{ p = new Peer(undefined, { config: ICE_CONFIG }); }
-    catch(err){ setJoinStatus('<span class="error-text">連線失敗，請重新整理頁面再試</span>'); return; }
-
-    let brokerOpened = false;
-
-    // 第一階段：連上 PeerJS 的訊號伺服器本身，這一步跟房主、跟 NAT/TURN 都還沒關係
-    const brokerTimeout = setTimeout(() => {
-      setJoinStatus('<span class="error-text">連不上「訊號伺服器」，還沒進到跟房主連線的階段。可能是這個網路環境（防火牆、公司/學校網路）擋住了，或伺服器暫時不穩。可以換個網路（例如手機熱點）試試，或稍後再試</span>');
-      try{ p.destroy(); }catch(e){}
-    }, 8000);
-
-    p.on('open', () => {
-      brokerOpened = true;
-      clearTimeout(brokerTimeout);
-      peer = p;
-      setJoinStatus('連線中…（已連上訊號伺服器，正在連線房主）');
-
-      // 第二階段：跟房主之間真正建立 P2P 連線
-      const connectTimeout = setTimeout(() => {
-        setJoinStatus('<span class="error-text">已經連上訊號伺服器，但跟房主之間一直連不起來，可能是雙方網路環境擋掉了直連。可以再試一次，或換個網路試試</span>');
-        try{ p.destroy(); }catch(e){}
-      }, 15000);
-
-      const c = p.connect(roomIdFor(codeRaw), { reliable:true });
-      conn = c;
-      setupConnHandlers();
-      watchIceState(conn, setJoinStatus, '連線中…（正在連線房主）');
-      conn.on('open', () => {
-        clearTimeout(connectTimeout);
-        networked = true; myRole = 2;
-        enterGame();
+    setJoinStatus('連線中…（正在連上中繼伺服器）');
+    roomTopic = roomTopicFor(codeRaw);
+    myRole = 2;   // 先宣告自己是加入者，避免收到自己發布的 join 回送時被誤判成房主
+    joinTimeout = setTimeout(() => {
+      joinTimeout = null;
+      myRole = null;
+      setJoinStatus('<span class="error-text">等不到房主回應。請確認代碼是否正確、房主是否還在「建立房間」的等待頁面</span>');
+      if(mqttClient){ mqttClose(mqttClient); mqttClient = null; }
+    }, 15000);
+    mqttConnectAny().then(c => {
+      mqttClient = c;
+      mqttClient.handlers.push((topic, payload) => {
+        if(topic !== roomTopic) return;
+        let msg; try{ msg = JSON.parse(payload); }catch(e){ return; }
+        handleRemoteMessage(msg);
       });
-    });
-    p.on('error', err => {
-      clearTimeout(brokerTimeout);
-      if(!brokerOpened){
-        setJoinStatus('<span class="error-text">連不上訊號伺服器，請確認網路連線，或換個網路再試</span>');
-      } else {
-        setJoinStatus('<span class="error-text">找不到這個房間，確認代碼是否正確</span>');
-      }
-    });
-  }
-
-  function setupConnHandlers(){
-    conn.on('data', handleRemoteMessage);
-    conn.on('close', () => { netStatusEl.textContent = '對方已離線'; });
-    conn.on('error', () => { netStatusEl.textContent = '連線發生問題'; });
-  }
-
-  // 把瀏覽器內部的 WebRTC ICE 連線狀態直接顯示在畫面上，不用打開開發者工具就看得到
-  // （Chrome 不會像 Firefox 一樣把 ICE failed 印在 console，手機上更是沒有 console 可看）
-  const ICE_STATE_LABEL = {
-    'new': '準備中',
-    'checking': '正在嘗試建立直連',
-    'connected': '已連線',
-    'completed': '已連線',
-    'failed': '直連失敗（可能是雙方網路環境擋掉了 P2P）',
-    'disconnected': '連線中斷',
-    'closed': '已關閉'
-  };
-  function watchIceState(conn, setStatus, baseMsg){
-    let tries = 0;
-    const timer = setInterval(() => {
-      tries++;
-      const pc = conn && conn.peerConnection;
-      if(pc){
-        clearInterval(timer);
-        const report = () => {
-          const label = ICE_STATE_LABEL[pc.iceConnectionState] || pc.iceConnectionState;
-          setStatus(baseMsg + '（目前狀態：' + label + '）');
+      return mqttSubscribe(mqttClient, roomTopic).then(() => {
+        mqttStartPing(mqttClient);
+        mqttClient.onDisconnect = () => {
+          if(networked){ netStatusEl.textContent = '連線中斷，重新整理頁面可重連'; }
+          else { setJoinStatus('<span class="error-text">連上中繼後連線中斷，請重新整理頁面再試</span>'); }
         };
-        pc.addEventListener('iceconnectionstatechange', report);
-        report();
-      } else if(tries > 40){
-        clearInterval(timer);
-      }
-    }, 250);
+        setJoinStatus('連線中…（已連上中繼，等待房主回應）');
+        try{ mqttClient.ws.send(mqttPacketPublish(roomTopic, JSON.stringify({ type:'join', from:2 }))); }catch(e){}
+      });
+    }).catch(() => {
+      clearTimeout(joinTimeout); joinTimeout = null;
+      myRole = null;
+      if(mqttClient){ mqttClose(mqttClient); mqttClient = null; }
+      setJoinStatus('<span class="error-text">連不上中繼伺服器（免費公開 MQTT broker），請確認網路連線，或稍後再試</span>');
+    });
   }
 
   function sendMsg(msg){
-    if(networked && conn && conn.open){ conn.send(msg); }
+    if(networked && mqttClient && mqttClient.ws.readyState === WebSocket.OPEN){
+      msg.from = myRole;
+      try{ mqttClient.ws.send(mqttPacketPublish(roomTopic, JSON.stringify(msg))); }catch(e){}
+    }
   }
 
   function handleRemoteMessage(msg){
     if(!msg || !msg.type) return;
+    if(msg.from === myRole) return;   // MQTT 會把自己發布的訊息送回，過濾掉
+    if(msg.type === 'join'){
+      if(msg.from !== 2) return;   // 只認加入者發出的 join 請求
+      // 房主收到加入請求：回 welcome，雙方都進遊戲（房主=藍方）
+      if(joinTimeout){ clearTimeout(joinTimeout); joinTimeout = null; }
+      networked = true; myRole = 1;
+      try{ mqttClient.ws.send(mqttPacketPublish(roomTopic, JSON.stringify({ type:'welcome', from:1 }))); }catch(e){}
+      enterGame();
+      return;
+    }
+    if(msg.type === 'welcome'){
+      if(msg.from !== 1) return;   // 只認房主發出的 welcome
+      // 加入者收到房主確認
+      if(joinTimeout){ clearTimeout(joinTimeout); joinTimeout = null; }
+      networked = true; myRole = 2;
+      enterGame();
+      return;
+    }
     if(msg.type === 'place'){
       state.pieces.push({ id: msg.id, x: msg.x, y: msg.y, owner: msg.owner, alive:true, lives:1, king:false });
       const count = state.pieces.filter(p => p.owner === msg.owner).length;
@@ -634,9 +700,9 @@
   }
 
   function leaveToLobby(){
-    if(conn){ try{ conn.close(); }catch(e){} }
-    if(peer){ try{ peer.destroy(); }catch(e){} }
-    conn = null; peer = null; networked = false; myRole = null;
+    if(mqttClient){ mqttClose(mqttClient); }
+    mqttClient = null; roomTopic = null; networked = false; myRole = null;
+    if(joinTimeout){ clearTimeout(joinTimeout); joinTimeout = null; }
     gameArea.hidden = true;
     lobbyArea.hidden = false;
     document.getElementById('joinCodeInput').value = '';
