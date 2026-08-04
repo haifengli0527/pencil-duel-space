@@ -248,6 +248,44 @@
   .stamp-card.p2{ border-color:var(--ink-red); color:var(--ink-red); box-shadow:0 10px 40px rgba(255,107,107,0.25); }
   .stamp-title{ font-family:'Ma Shan Zheng', cursive; font-size:2.4rem; }
   .stamp-card .btn{ margin-top:10px; }
+
+  #rpsOverlay{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(3,4,12,0);
+    opacity:0; pointer-events:none;
+    transition:opacity .35s, background-color .35s;
+  }
+  #rpsOverlay.active{ opacity:1; pointer-events:auto; background:rgba(3,4,12,0.7); }
+  .rps-card{
+    background:rgba(10,14,32,0.95);
+    border:2px solid var(--panel-border);
+    border-radius:14px;
+    padding:26px 32px;
+    text-align:center;
+    box-shadow:0 10px 40px rgba(0,0,0,0.6);
+    max-width:360px;
+  }
+  .rps-title{ font-family:'Noto Sans TC', sans-serif; font-weight:900; font-size:1.25rem; color:var(--graphite); letter-spacing:0.06em; }
+  .rps-hint{ margin-top:8px; font-size:0.85rem; color:var(--graphite-soft); min-height:2.6em; line-height:1.5; }
+  .rps-choices{ display:flex; gap:14px; justify-content:center; margin-top:14px; }
+  .rps-btn{
+    width:64px; height:64px;
+    border-radius:50%;
+    border:2px solid var(--panel-border);
+    background:rgba(255,255,255,0.06);
+    font-size:1.9rem;
+    line-height:1;
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .15s, border-color .15s, background-color .15s;
+  }
+  .rps-btn:hover:not(:disabled){ transform:translateY(-3px); border-color:var(--ink-blue); background:rgba(79,195,255,0.12); }
+  .rps-btn:active:not(:disabled){ transform:translateY(0); }
+  .rps-btn:disabled{ opacity:0.35; cursor:default; }
+  .rps-btn:focus-visible{ outline:2px solid var(--ink-blue); outline-offset:2px; }
+  .rps-reveal{ display:none; align-items:center; justify-content:center; gap:18px; margin-top:14px; font-size:2.2rem; }
+  .rps-reveal .rps-vs{ font-size:0.9rem; color:var(--graphite-soft); font-weight:700; }
 </style>
 </head>
 <body>
@@ -286,7 +324,7 @@
     <details class="rules">
       <summary>規則說明</summary>
       <div class="rules-body">
-        雙方各有 10 顆棋子（太空船）。開局時藍方先在左半邊自由點擊放置全部棋子，放完後再點選其中一艘封為「旗艦」（有雙重生命，被打中一次不會馬上陣亡，造型也會馬上變得不一樣，方便辨認）。接著換紅方在右半邊放置並選旗艦。正式開打後兩人輪流出手：按住自己的一艘船，往想要的方向的「反方向」拖曳，放開後船會往另一邊彈射出去並畫出一條航跡——但拖曳時只會看到大概的瞄準方向，實際落點與是否命中要放開才會揭曉，力道越大方向也越難控制。如果航跡掃過對方的船，那艘船就會損失一條生命，生命耗盡才會陣亡。棋盤中央有一條危險的小行星帶，船的最終落點如果停在裡面就會直接墜毀。棋盤邊界是黑洞，力道拉過頭、衝出邊界的船也會直接被吞噬消失，所以拉滿力道不是零風險的事。雙方在自己陣地最深處都各自有一座基地，只要有船精準降落進「對方」的基地，就直接獲勝——不用等殲滅對方也能靠奇襲取勝！彈射結束後船最終停留的位置就是它的新座標，接著換對方出手。誰先把對方全部消滅、或搶先攻進對方基地，就獲勝！
+        開局前先猜拳（剪刀、石頭、布）決定誰先手：贏的一方是藍方、優先開始放置棋子，避免固定由某一方先手造成的優劣勢。雙方各有 10 顆棋子（太空船）。藍方先在左半邊自由點擊放置全部棋子，放完後再點選其中一艘封為「旗艦」（有雙重生命，被打中一次不會馬上陣亡，造型也會馬上變得不一樣，方便辨認）。接著換紅方在右半邊放置並選旗艦。正式開打後兩人輪流出手：按住自己的一艘船，往想要的方向的「反方向」拖曳，放開後船會往另一邊彈射出去並畫出一條航跡——但拖曳時只會看到大概的瞄準方向，實際落點與是否命中要放開才會揭曉，力道越大方向也越難控制。如果航跡掃過對方的船，那艘船就會損失一條生命，生命耗盡才會陣亡。棋盤中央有一條危險的小行星帶，船的最終落點如果停在裡面就會直接墜毀。棋盤邊界是黑洞，力道拉過頭、衝出邊界的船也會直接被吞噬消失，所以拉滿力道不是零風險的事。雙方在自己陣地最深處都各自有一座基地，只要有船精準降落進「對方」的基地，就直接獲勝——不用等殲滅對方也能靠奇襲取勝！彈射結束後船最終停留的位置就是它的新座標，接著換對方出手。誰先把對方全部消滅、或搶先攻進對方基地，就獲勝！
       </div>
     </details>
 
@@ -337,6 +375,18 @@
         <g id="previewLayer"></g>
       </svg>
       <div class="edge-vignette"></div>
+      <div id="rpsOverlay">
+        <div class="rps-card">
+          <div class="rps-title">猜拳決定誰先手</div>
+          <div class="rps-hint" id="rpsHint">請出拳:剪刀、石頭、布,勝者優先出手</div>
+          <div class="rps-choices" id="rpsChoicesEl">
+            <button class="rps-btn" data-choice="scissors" type="button" aria-label="剪刀">✌️</button>
+            <button class="rps-btn" data-choice="rock" type="button" aria-label="石頭">✊</button>
+            <button class="rps-btn" data-choice="paper" type="button" aria-label="布">✋</button>
+          </div>
+          <div class="rps-reveal" id="rpsRevealEl"></div>
+        </div>
+      </div>
       <div id="winnerOverlay">
         <div class="stamp-card" id="stampCard">
           <div class="stamp-title" id="stampTitle">獲勝！</div>
@@ -516,6 +566,11 @@
   const winnerOverlay = document.getElementById('winnerOverlay');
   const stampCard = document.getElementById('stampCard');
   const stampTitle = document.getElementById('stampTitle');
+  const rpsOverlay = document.getElementById('rpsOverlay');
+  const rpsHint = document.getElementById('rpsHint');
+  const rpsChoicesEl = document.getElementById('rpsChoicesEl');
+  const rpsRevealEl = document.getElementById('rpsRevealEl');
+  const RPS_EMOJI = { rock:'✊', paper:'✋', scissors:'✌️' };
   const netStatusEl = document.getElementById('netStatus');
   const lobbyArea = document.getElementById('lobbyArea');
   const gameArea = document.getElementById('gameArea');
@@ -529,7 +584,8 @@
   // --- Networking state ---
   let mqttClient = null;   // MQTT relay 連線
   let roomTopic = null;    // pencilduel/{code}/game
-  let myRole = null;       // 1 = host/blue, 2 = joiner/red, null = local hot-seat
+  let myRole = null;       // 網路身分：1 = 房主, 2 = 加入者, null = 本機雙人。只用來過濾自己的 echo，不代表遊戲顏色
+  let myColor = null;      // 遊戲顏色：1 = 藍方, 2 = 紅方，由猜拳決定，null = 尚未決定（僅網路對戰需要）
   let networked = false;
   let joinTimeout = null;
 
@@ -539,7 +595,7 @@
   }
 
   function freshState(){
-    return { phase:'setup1', turn:1, pieces:[], traces:[], winner:null };
+    return { phase:'rps', turn:1, pieces:[], traces:[], winner:null, rpsChoices:{1:null,2:null}, rpsReveal:null };
   }
 
   // ---------- Lobby wiring ----------
@@ -669,6 +725,12 @@
       enterGame();
       return;
     }
+    if(msg.type === 'rps'){
+      state.rpsChoices[msg.from] = msg.choice;
+      render();
+      tryResolveRps();
+      return;
+    }
     if(msg.type === 'place'){
       state.pieces.push({ id: msg.id, x: msg.x, y: msg.y, owner: msg.owner, alive:true, lives:1, king:false });
       const count = state.pieces.filter(p => p.owner === msg.owner).length;
@@ -702,7 +764,7 @@
 
   function leaveToLobby(){
     if(mqttClient){ mqttClose(mqttClient); }
-    mqttClient = null; roomTopic = null; networked = false; myRole = null;
+    mqttClient = null; roomTopic = null; networked = false; myRole = null; myColor = null;
     if(joinTimeout){ clearTimeout(joinTimeout); joinTimeout = null; }
     gameArea.hidden = true;
     lobbyArea.hidden = false;
@@ -1012,11 +1074,86 @@
   }
 
   function canActOn(owner){
-    return (!networked) || (myRole === owner);
+    return (!networked) || (myColor === owner);
+  }
+
+  function handleRpsChoice(choice){
+    if(!state || state.phase !== 'rps') return;
+    if(!networked){
+      // 本機雙人：輪流出拳，不揭曉上一位選了什麼，跟封王一樣是「信任對方不要偷看」
+      if(state.turn === 1){
+        if(state.rpsChoices[1]) return;
+        state.rpsChoices[1] = choice;
+        state.turn = 2;
+        render();
+      } else {
+        if(state.rpsChoices[2]) return;
+        state.rpsChoices[2] = choice;
+        tryResolveRps();
+      }
+    } else {
+      if(state.rpsChoices[myRole]) return;
+      state.rpsChoices[myRole] = choice;
+      sendMsg({ type:'rps', choice });
+      render();
+      tryResolveRps();
+    }
+  }
+
+  function tryResolveRps(){
+    const c1 = state.rpsChoices[1], c2 = state.rpsChoices[2];
+    if(!c1 || !c2) return;
+    if(c1 === c2){
+      // 平手，重新出拳
+      state.rpsChoices = {1:null, 2:null};
+      state.turn = 1;
+      render();
+      return;
+    }
+    const beats = { rock:'scissors', scissors:'paper', paper:'rock' };
+    const winnerColor = (beats[c1] === c2) ? 1 : 2;
+    if(networked){ myColor = (myRole === winnerColor) ? 1 : 2; }
+    state.rpsReveal = { c1, c2, winnerColor };
+    render();
+    setTimeout(() => {
+      if(!state || state.phase !== 'rps') return; // 使用者可能已經離開回大廳
+      state.phase = 'setup1';
+      state.turn = 1;
+      state.rpsReveal = null;
+      render();
+    }, 1600);
+  }
+
+  document.querySelectorAll('.rps-btn').forEach(btn => {
+    btn.addEventListener('click', () => handleRpsChoice(btn.dataset.choice));
+  });
+
+  function renderRpsCard(){
+    if(state.rpsReveal){
+      rpsChoicesEl.style.display = 'none';
+      rpsRevealEl.style.display = 'flex';
+      const { c1, c2, winnerColor } = state.rpsReveal;
+      rpsRevealEl.innerHTML =
+        '<span>' + RPS_EMOJI[c1] + '</span><span class="rps-vs">VS</span><span>' + RPS_EMOJI[c2] + '</span>';
+      rpsHint.textContent = !networked
+        ? ((winnerColor === 1 ? '玩家一' : '玩家二') + ' 猜拳獲勝，是藍方、優先出手！')
+        : (myColor === 1 ? '你猜拳獲勝！你是藍方，優先出手' : '對方猜拳獲勝，你是紅方');
+      return;
+    }
+    rpsRevealEl.style.display = 'none';
+    rpsChoicesEl.style.display = 'flex';
+    if(!networked){
+      rpsHint.textContent = (state.turn === 1 ? '玩家一' : '玩家二') + ' 請出拳（選完換人，別讓對方看到剛剛選了什麼）';
+      rpsChoicesEl.querySelectorAll('.rps-btn').forEach(b => { b.disabled = false; });
+    } else {
+      const picked = !!state.rpsChoices[myRole];
+      rpsHint.textContent = picked ? '已出拳，等待對方…' : '請出拳:剪刀、石頭、布,勝者優先出手';
+      rpsChoicesEl.querySelectorAll('.rps-btn').forEach(b => { b.disabled = picked; });
+    }
   }
 
   function onSvgPointerDown(e){
-    if(!state || state.phase === 'over') return;
+    if(!state || state.phase === 'over' || state.phase === 'rps') return;
     const pt = toBoardPoint(e);
     const pieceGroup = e.target.closest('[data-piece-id]');
     if(pieceGroup && (state.phase === 'playing' || state.phase === 'king1' || state.phase === 'king2')){
@@ -1119,9 +1256,12 @@
     labelRed.classList.toggle('show', showZones);
 
     let myTag = '';
-    if(networked){ myTag = myRole === 1 ? '（你是藍方）' : '（你是紅方）'; }
+    if(networked && myColor){ myTag = myColor === 1 ? '（你是藍方）' : '（你是紅方）'; }
 
-    if(state.phase === 'setup1'){
+    if(state.phase === 'rps'){
+      statusText.textContent = '猜拳決定誰先手…';
+      turnDot.style.background = 'var(--graphite-soft)';
+    } else if(state.phase === 'setup1'){
       const n = state.pieces.filter(p => p.owner===1).length;
       statusText.textContent = `藍方請在左半邊點擊放置棋子（${n}/10）${myTag}`;
       turnDot.style.background = 'var(--ink-blue)';
@@ -1150,11 +1290,19 @@
     } else {
       winnerOverlay.classList.remove('active');
     }
+
+    if(state.phase === 'rps'){
+      rpsOverlay.classList.add('active');
+      renderRpsCard();
+    } else {
+      rpsOverlay.classList.remove('active');
+    }
   }
 
   function resetLocalState(){
     state = freshState();
     dragging = null;
+    myColor = null;
     localIdCounters = { 1:0, 2:0 };
     previewLayer.innerHTML = '';
   }
