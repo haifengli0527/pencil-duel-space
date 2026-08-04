@@ -382,9 +382,10 @@
   // 只要瀏覽器能開 WSS 443（任何 NAT / 4G/5G CGNAT 都擋不住），就保證能連。
   // 不需要 TURN、不需要註冊帳號、不需要任何金鑰。
   // 注意：公開 broker 無 SLA、會對單一 IP 限流，但一局只有 2 條連線，不會撞到。
+  // EMQX 放第一（作者實測：補上子協定後 EMQX 連線穩定，HiveMQ 在他環境連不上，可能為地域網路差異）
   const MQTT_BROKERS = [
-    'wss://broker.hivemq.com:8884/mqtt',
-    'wss://broker.emqx.io:8084/mqtt'
+    'wss://broker.emqx.io:8084/mqtt',
+    'wss://broker.hivemq.com:8884/mqtt'
   ];
   const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -415,10 +416,11 @@
     return new Uint8Array([0x82, ...mqttRemainingLen(body.length), ...body]);
   }
   function mqttPacketPublish(topic, payload){
-    // QoS 0 PUBLISH: body = topic_len(2) + topic + payload_len(2) + payload（沒有 packet id）
+    // 標準 MQTT QoS0 PUBLISH：body = topic_len(2) + topic + payload。
+    // payload 沒有長度欄位（由 remaining length 反推），不要多加，否則標準 MQTT 工具會解析錯。
     const tBytes = mqttEnc.encode(topic);
     const mBytes = mqttEnc.encode(payload);
-    const body = [(tBytes.length>>8)&0xFF, tBytes.length&0xFF, ...tBytes, (mBytes.length>>8)&0xFF, mBytes.length&0xFF, ...mBytes];
+    const body = [(tBytes.length>>8)&0xFF, tBytes.length&0xFF, ...tBytes, ...mBytes];
     return new Uint8Array([0x30, ...mqttRemainingLen(body.length), ...body]);
   }
   function mqttData(ev){
@@ -430,7 +432,7 @@
   function mqttConnect(brokerUrl){
     return new Promise((resolve, reject) => {
       let ws;
-      try{ ws = new WebSocket(brokerUrl); }
+      try{ ws = new WebSocket(brokerUrl, ['mqtt']); }   // MQTT-over-WebSocket 子協定是必須的，EMQX 等 broker 沒有它會拒絕
       catch(err){ reject(err); return; }
       ws.binaryType = 'arraybuffer';
       const client = { ws, handlers: [], onDisconnect: null, pingTimer: null };
@@ -449,13 +451,12 @@
           if(done) return;
           done = true; clearTimeout(tmo);
           resolve(client);
-        } else if(a[0] === 0x30){ // PUBLISH (QoS 0): skip varint remaining length, then topic + payload
+        } else if(a[0] === 0x30){ // PUBLISH (QoS 0): skip varint remaining length, read topic, payload = 剩餘 bytes
           let i = 1, mult = 1, rl = 0;
           do { rl += (a[i] & 0x7F) * mult; mult *= 128; i++; } while(a[i-1] & 0x80);
           const tl = (a[i]<<8)|a[i+1]; i += 2;
           const topic = mqttDec.decode(a.slice(i, i+tl));
-          const plen = (a[i+tl]<<8)|a[i+tl+1];
-          const payload = mqttDec.decode(a.slice(i+tl+2, i+tl+2+plen));
+          const payload = mqttDec.decode(a.slice(i+tl));
           client.handlers.forEach(h => { try{ h(topic, payload); }catch(e){} });
         }
         // 0x90 SUBACK / 0xD0 PINGRESP: ignore here
