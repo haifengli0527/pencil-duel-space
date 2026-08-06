@@ -24,6 +24,21 @@
     --asteroid:#7a7266;
     --station-gold:#ffd76b;
   }
+  :root[data-theme="paper"]{
+    --space-0:#dcdad2;
+    --space-1:#eeece5;
+    --space-2:#fbfaf6;
+    --panel-bg: rgba(255,255,253,0.92);
+    --panel-border: rgba(0,0,0,0.12);
+    --graphite:#3a3a36;
+    --graphite-soft:#767065;
+    --ink-blue:#1f4e9c;
+    --ink-blue-soft:#527ab8;
+    --ink-red:#b6392c;
+    --ink-red-soft:#c96a5c;
+    --asteroid:#8a8070;
+    --station-gold:#c9a227;
+  }
   *{box-sizing:border-box;}
   body{
     margin:0;
@@ -286,13 +301,59 @@
   .rps-btn:focus-visible{ outline:2px solid var(--ink-blue); outline-offset:2px; }
   .rps-reveal{ display:none; align-items:center; justify-content:center; gap:18px; margin-top:14px; font-size:2.2rem; }
   .rps-reveal .rps-vs{ font-size:0.9rem; color:var(--graphite-soft); font-weight:700; }
+
+  /* ---- 主題切換（太空版／紙上版） ---- */
+  .theme-toggle-row{ display:flex; justify-content:center; gap:8px; margin:10px 0 14px; }
+  .theme-toggle-btn{
+    font-family:'Noto Sans TC', sans-serif;
+    font-size:0.8rem;
+    font-weight:500;
+    padding:6px 14px;
+    border-radius:999px;
+    border:1.5px solid var(--panel-border);
+    background:rgba(255,255,255,0.06);
+    color:var(--graphite-soft);
+    cursor:pointer;
+  }
+  .theme-toggle-btn.active{ color:var(--graphite); font-weight:700; border-color:var(--ink-blue); background:rgba(79,195,255,0.12); }
+  .theme-toggle-btn:focus-visible{ outline:2px solid var(--ink-blue); outline-offset:2px; }
+
+  /* ---- 紙上版：這些規則在太空版裡是寫死的顏色，沒有跟著 CSS 變數走，紙上版要另外覆寫 ---- */
+  :root[data-theme="paper"] body{
+    background: radial-gradient(ellipse at 50% 0%, #f9f8f3 0%, var(--space-1) 75%);
+  }
+  :root[data-theme="paper"] .title{ text-shadow:none; }
+  :root[data-theme="paper"] .theme-toggle-btn{ background:rgba(0,0,0,0.03); }
+  :root[data-theme="paper"] .theme-toggle-btn.active{ background:rgba(31,78,156,0.08); }
+  :root[data-theme="paper"] .lobby-card{ box-shadow:0 10px 24px rgba(0,0,0,0.16); }
+  :root[data-theme="paper"] .tab-btn.active{ background:rgba(31,78,156,0.08); }
+  :root[data-theme="paper"] #joinCodeInput{ background:#fff; }
+  :root[data-theme="paper"] .room-code{ background:rgba(31,78,156,0.08); }
+  :root[data-theme="paper"] .status-bar{ box-shadow:none; }
+  :root[data-theme="paper"] .board-panel{
+    background: var(--space-2);
+    box-shadow:0 12px 26px rgba(0,0,0,0.2), 0 2px 6px rgba(0,0,0,0.09);
+  }
+  :root[data-theme="paper"] .edge-vignette{ display:none; }
+  :root[data-theme="paper"] .btn{ background:rgba(0,0,0,0.03); box-shadow:2px 2px 0 rgba(0,0,0,0.14); }
+  :root[data-theme="paper"] .btn:hover{ background:rgba(0,0,0,0.07); }
+  :root[data-theme="paper"] .btn:active{ box-shadow:1px 1px 0 rgba(0,0,0,0.14); }
+  :root[data-theme="paper"] .stamp-card{ background:rgba(255,253,247,0.95); box-shadow:0 10px 30px rgba(0,0,0,0.3); }
+  :root[data-theme="paper"] .rps-card{ background:rgba(255,253,247,0.95); box-shadow:0 10px 30px rgba(0,0,0,0.3); }
+  :root[data-theme="paper"] .rps-btn{ background:rgba(0,0,0,0.04); }
+  :root[data-theme="paper"] .rps-btn:hover:not(:disabled){ background:rgba(31,78,156,0.1); }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="title-row">
     <div class="title">紙上彈筆對戰</div>
-    <div class="subtitle">小時候的紙上彈筆遊戲，這次搬到外太空對戰</div>
+    <div class="subtitle" id="subtitleText">小時候的紙上彈筆遊戲，這次搬到外太空對戰</div>
+  </div>
+
+  <div class="theme-toggle-row">
+    <button class="theme-toggle-btn active" data-theme-choice="space" type="button">🌌 太空版</button>
+    <button class="theme-toggle-btn" data-theme-choice="paper" type="button">📝 紙上版</button>
   </div>
 
   <div id="lobbyArea" class="lobby-card">
@@ -323,7 +384,7 @@
   <div id="gameArea" hidden>
     <details class="rules">
       <summary>規則說明</summary>
-      <div class="rules-body">
+      <div class="rules-body" id="rulesBodyText">
         開局前先猜拳（剪刀、石頭、布）決定誰先手：贏的一方是藍方、優先開始放置棋子，避免固定由某一方先手造成的優劣勢。雙方各有 10 顆棋子（太空船）。藍方先在左半邊自由點擊放置全部棋子，放完後再點選其中一艘封為「旗艦」（有雙重生命，被打中一次不會馬上陣亡，造型也會馬上變得不一樣，方便辨認）。接著換紅方在右半邊放置並選旗艦。正式開打後兩人輪流出手：按住自己的一艘船，往想要的方向的「反方向」拖曳，放開後船會往另一邊彈射出去並畫出一條航跡——但拖曳時只會看到大概的瞄準方向，實際落點與是否命中要放開才會揭曉，力道越大方向也越難控制。如果航跡掃過對方的船，那艘船就會損失一條生命，生命耗盡才會陣亡。棋盤中央有一條危險的小行星帶，船的最終落點如果停在裡面就會直接墜毀。棋盤邊界是黑洞，力道拉過頭、衝出邊界的船也會直接被吞噬消失，所以拉滿力道不是零風險的事。雙方在自己陣地最深處都各自有一座基地（棋盤上那圈會發光的虛線光環），只要有船「最終停留的位置」剛好落在對方基地的光環範圍內，就直接獲勝——不用等殲滅對方也能靠奇襲取勝！注意這跟打中敵艦不一樣：打中敵艦是看整條航跡有沒有掃過，但攻進基地只看最後停下來的那個點有沒有落在光環裡，途中飛過去、擦邊而過都不算，所以通常要先想辦法把船挪到基地附近、再用力道較小（誤差也較小）的一擊謹慎收尾，會比遠距離猛力硬打容易成功。彈射結束後船最終停留的位置就是它的新座標，接著換對方出手。誰先把對方全部消滅、或搶先攻進對方基地，就獲勝！
       </div>
     </details>
@@ -352,15 +413,20 @@
             <stop offset="60%" stop-color="#080b22"/>
             <stop offset="100%" stop-color="#020208"/>
           </radialGradient>
+          <radialGradient id="paperGradient" cx="50%" cy="45%" r="75%">
+            <stop offset="0%" stop-color="#fdfcf9"/>
+            <stop offset="70%" stop-color="#f8f6f0"/>
+            <stop offset="100%" stop-color="#ebe8df"/>
+          </radialGradient>
           <radialGradient id="blueBaseGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#4fc3ff" stop-opacity="0.55"/>
-            <stop offset="70%" stop-color="#4fc3ff" stop-opacity="0.18"/>
-            <stop offset="100%" stop-color="#4fc3ff" stop-opacity="0"/>
+            <stop offset="0%" stop-color="var(--ink-blue)" stop-opacity="0.55"/>
+            <stop offset="70%" stop-color="var(--ink-blue)" stop-opacity="0.18"/>
+            <stop offset="100%" stop-color="var(--ink-blue)" stop-opacity="0"/>
           </radialGradient>
           <radialGradient id="redBaseGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#ff6b6b" stop-opacity="0.55"/>
-            <stop offset="70%" stop-color="#ff6b6b" stop-opacity="0.18"/>
-            <stop offset="100%" stop-color="#ff6b6b" stop-opacity="0"/>
+            <stop offset="0%" stop-color="var(--ink-red)" stop-opacity="0.55"/>
+            <stop offset="70%" stop-color="var(--ink-red)" stop-opacity="0.18"/>
+            <stop offset="100%" stop-color="var(--ink-red)" stop-opacity="0"/>
           </radialGradient>
         </defs>
         <rect id="boardBg" x="0" y="0" width="920" height="560" fill="url(#spaceGradient)"></rect>
@@ -397,7 +463,7 @@
 
     <div class="controls">
       <div class="controls-left">
-        <span class="hint">提示：拖越遠彈越用力，方向也越難控制；中央小行星帶跟邊界黑洞都會讓船直接墜毀，攻進對方陣地深處的基地也能直接獲勝</span>
+        <span class="hint" id="hintText">提示：拖越遠彈越用力，方向也越難控制；中央小行星帶跟邊界黑洞都會讓船直接墜毀，攻進對方陣地深處的基地也能直接獲勝</span>
       </div>
       <div class="controls-left">
         <button class="btn" id="restartBtn" type="button">重新開始</button>
@@ -574,8 +640,53 @@
   const netStatusEl = document.getElementById('netStatus');
   const lobbyArea = document.getElementById('lobbyArea');
   const gameArea = document.getElementById('gameArea');
+  const boardBg = document.getElementById('boardBg');
+  const subtitleText = document.getElementById('subtitleText');
+  const hintText = document.getElementById('hintText');
+  const rulesBodyText = document.getElementById('rulesBodyText');
 
   function colorFor(owner){ return owner === 1 ? 'var(--ink-blue)' : 'var(--ink-red)'; }
+
+  // ---- 遊戲主題（太空版／紙上版）：純視覺切換，不影響連線雙方的遊戲邏輯，兩邊各自本機決定就好 ----
+  const THEME_TEXT = {
+    space: {
+      subtitle: '小時候的紙上彈筆遊戲，這次搬到外太空對戰',
+      labelBlue: '藍方星域',
+      labelRed: '紅方星域',
+      hint: '提示：拖越遠彈越用力，方向也越難控制；中央小行星帶跟邊界黑洞都會讓船直接墜毀，攻進對方陣地深處的基地也能直接獲勝',
+      rules: '開局前先猜拳（剪刀、石頭、布）決定誰先手：贏的一方是藍方、優先開始放置棋子，避免固定由某一方先手造成的優劣勢。雙方各有 10 顆棋子（太空船）。藍方先在左半邊自由點擊放置全部棋子，放完後再點選其中一艘封為「旗艦」（有雙重生命，被打中一次不會馬上陣亡，造型也會馬上變得不一樣，方便辨認）。接著換紅方在右半邊放置並選旗艦。正式開打後兩人輪流出手：按住自己的一艘船，往想要的方向的「反方向」拖曳，放開後船會往另一邊彈射出去並畫出一條航跡——但拖曳時只會看到大概的瞄準方向，實際落點與是否命中要放開才會揭曉，力道越大方向也越難控制。如果航跡掃過對方的船，那艘船就會損失一條生命，生命耗盡才會陣亡。棋盤中央有一條危險的小行星帶，船的最終落點如果停在裡面就會直接墜毀。棋盤邊界是黑洞，力道拉過頭、衝出邊界的船也會直接被吞噬消失，所以拉滿力道不是零風險的事。雙方在自己陣地最深處都各自有一座基地（棋盤上那圈會發光的虛線光環），只要有船「最終停留的位置」剛好落在對方基地的光環範圍內，就直接獲勝——不用等殲滅對方也能靠奇襲取勝！注意這跟打中敵艦不一樣：打中敵艦是看整條航跡有沒有掃過，但攻進基地只看最後停下來的那個點有沒有落在光環裡，途中飛過去、擦邊而過都不算，所以通常要先想辦法把船挪到基地附近、再用力道較小（誤差也較小）的一擊謹慎收尾，會比遠距離猛力硬打容易成功。彈射結束後船最終停留的位置就是它的新座標，接著換對方出手。誰先把對方全部消滅、或搶先攻進對方基地，就獲勝！'
+    },
+    paper: {
+      subtitle: '小時候在紙上玩的彈筆對戰，原汁原味重現',
+      labelBlue: '藍方陣地',
+      labelRed: '紅方陣地',
+      hint: '提示：拖越遠彈越用力，方向也越難控制；中央危險地帶跟紙張邊界都會讓棋子直接淘汰，攻進對方陣地深處的據點也能直接獲勝',
+      rules: '開局前先猜拳（剪刀、石頭、布）決定誰先手：贏的一方是藍方、優先開始放置棋子，避免固定由某一方先手造成的優劣勢。雙方各有 10 顆棋子。藍方先在左半邊自由點擊放置全部棋子，放完後再點選其中一顆封為「旗艦」（有雙重生命，被打中一次不會馬上陣亡，造型也會馬上變得不一樣，方便辨認）。接著換紅方在右半邊放置並選旗艦。正式開打後兩人輪流出手：按住自己的一顆棋子，往想要的方向的「反方向」拖曳，放開後棋子會往另一邊彈射出去並畫出一條軌跡——但拖曳時只會看到大概的瞄準方向，實際落點與是否命中要放開才會揭曉，力道越大方向也越難控制。如果軌跡掃過對方的棋子，那顆棋子就會損失一條生命，生命耗盡才會淘汰。棋盤中央有一塊危險地帶，棋子的最終落點如果停在裡面就會直接淘汰。棋盤邊界之外就出界了，力道拉過頭、衝出邊界的棋子也會直接淘汰，所以拉滿力道不是零風險的事。雙方在自己陣地最深處都各自有一個據點（棋盤上那圈印章樣式的標記），只要有棋子「最終停留的位置」剛好落在對方據點的範圍內，就直接獲勝——不用等殲滅對方也能靠奇襲取勝！注意這跟打中敵方棋子不一樣：打中敵方棋子是看整條軌跡有沒有掃過，但攻進據點只看最後停下來的那個點有沒有落在範圍裡，途中飛過去、擦邊而過都不算，所以通常要先想辦法把棋子挪到據點附近、再用力道較小（誤差也較小）的一擊謹慎收尾，會比遠距離猛力硬打容易成功。彈射結束後棋子最終停留的位置就是它的新座標，接著換對方出手。誰先把對方全部消滅、或搶先攻進對方據點，就獲勝！'
+    }
+  };
+  let boardTheme = 'space';
+
+  function applyTheme(theme){
+    boardTheme = theme === 'paper' ? 'paper' : 'space';
+    document.documentElement.setAttribute('data-theme', boardTheme);
+    document.querySelectorAll('.theme-toggle-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.themeChoice === boardTheme);
+    });
+    const t = THEME_TEXT[boardTheme];
+    subtitleText.textContent = t.subtitle;
+    hintText.textContent = t.hint;
+    rulesBodyText.textContent = t.rules;
+    labelBlue.textContent = t.labelBlue;
+    labelRed.textContent = t.labelRed;
+    boardBg.setAttribute('fill', boardTheme === 'paper' ? 'url(#paperGradient)' : 'url(#spaceGradient)');
+    try{ localStorage.setItem('pencilDuelTheme', boardTheme); }catch(e){}
+    drawStars();
+    drawHazardAndBases();
+    if(state){ render(); }
+  }
+  document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => applyTheme(btn.dataset.themeChoice));
+  });
 
   let state = null;
   let dragging = null;
@@ -781,8 +892,24 @@
     return function(){ s = (s*9301+49297) % 233280; return s/233280; };
   }
 
+  const EXAM_SNIPPETS = ['姓名：______','座號：____','班級：______','第（　）題','(A)　(B)　(C)　(D)','選出正確答案','計算過程：','請作答於答案卷','1.','2.','3.','4.','x + y =','解：','得　分','不予計分'];
+
   function drawStars(){
     starsLayer.innerHTML = '';
+    if(boardTheme === 'paper'){
+      // 紙上版沒有星空，換成考卷正面印刷內容透到背面的淡淡痕跡，才有「拿考卷背面畫格子玩」的既視感
+      // 透明度要壓得非常低，不能干擾實際遊戲畫面
+      const rnd = makeSeededRandom(99);
+      for(let i=0;i<16;i++){
+        const x = 40 + rnd()*(BOARD_W-80);
+        const y = 40 + rnd()*(BOARD_H-80);
+        const rot = (rnd()*2-1)*8;
+        const size = 11 + rnd()*5;
+        const txt = EXAM_SNIPPETS[Math.floor(rnd()*EXAM_SNIPPETS.length)];
+        drawText(starsLayer, x, y, txt, { size, fill:'var(--graphite)', opacity: 0.045+rnd()*0.035, rotate: rot });
+      }
+      return;
+    }
     const rnd = makeSeededRandom(7);
     for(let i=0;i<130;i++){
       const x = rnd()*BOARD_W, y = rnd()*BOARD_H;
@@ -794,15 +921,27 @@
   function drawHazardAndBases(){
     hazardLayer.innerHTML = '';
     const bandX = CENTER_X - HAZARD_HALF_WIDTH;
-    const band = document.createElementNS(SVGNS, 'rect');
-    setAttrs(band, { x:bandX, y:0, width: HAZARD_HALF_WIDTH*2, height: BOARD_H, fill:'rgba(122,114,102,0.10)' });
-    hazardLayer.appendChild(band);
-    const rnd = makeSeededRandom(42);
-    for(let i=0;i<40;i++){
-      const y = rnd()*BOARD_H;
-      const x = CENTER_X + (rnd()*2-1) * HAZARD_HALF_WIDTH*0.9;
-      const r = 3 + rnd()*6;
-      drawCircle(hazardLayer, x, y, r, { fill:'rgba(122,114,102,0.55)', stroke:'rgba(90,84,74,0.6)', width:1 });
+    if(boardTheme === 'paper'){
+      // 紙上版：危險地帶改成斜線警戒紋，不用小行星
+      const band = document.createElementNS(SVGNS, 'rect');
+      setAttrs(band, { x:bandX, y:0, width: HAZARD_HALF_WIDTH*2, height: BOARD_H, fill:'rgba(182,57,44,0.06)' });
+      hazardLayer.appendChild(band);
+      drawLine(hazardLayer, bandX, 0, bandX, BOARD_H, { stroke:'var(--ink-red)', width:1.5, dash:'6 5', opacity:0.55 });
+      drawLine(hazardLayer, bandX+HAZARD_HALF_WIDTH*2, 0, bandX+HAZARD_HALF_WIDTH*2, BOARD_H, { stroke:'var(--ink-red)', width:1.5, dash:'6 5', opacity:0.55 });
+      for(let y=-40; y<BOARD_H+40; y+=26){
+        drawLine(hazardLayer, bandX, y, bandX+HAZARD_HALF_WIDTH*2, y+40, { stroke:'var(--ink-red)', width:1, opacity:0.18 });
+      }
+    } else {
+      const band = document.createElementNS(SVGNS, 'rect');
+      setAttrs(band, { x:bandX, y:0, width: HAZARD_HALF_WIDTH*2, height: BOARD_H, fill:'rgba(122,114,102,0.10)' });
+      hazardLayer.appendChild(band);
+      const rnd = makeSeededRandom(42);
+      for(let i=0;i<40;i++){
+        const y = rnd()*BOARD_H;
+        const x = CENTER_X + (rnd()*2-1) * HAZARD_HALF_WIDTH*0.9;
+        const r = 3 + rnd()*6;
+        drawCircle(hazardLayer, x, y, r, { fill:'rgba(122,114,102,0.55)', stroke:'rgba(90,84,74,0.6)', width:1 });
+      }
     }
 
     basesLayer.innerHTML = '';
@@ -815,18 +954,45 @@
     // 玩家看到的這圈範圍，就是最終停留點要落在裡面才算數的範圍，不再是誤導性的裝飾
     drawCircle(basesLayer, cx, cy, BASE_ICON_R+18, { fill: glowUrl });
     drawCircle(basesLayer, cx, cy, BASE_ICON_R, { stroke: color, width:1.5, dash:'4 3', className:'station-pulse' });
-    const pts = [];
-    for(let i=0;i<5;i++){
-      const ang = -Math.PI/2 + i*(2*Math.PI/5);
-      pts.push([cx + Math.cos(ang)*BASE_ICON_R, cy + Math.sin(ang)*BASE_ICON_R]);
+    if(boardTheme === 'paper'){
+      // 紙上版：印章樣式——同心圓 + 中間一個簡單的星芒，取代太空站五角造型
+      drawCircle(basesLayer, cx, cy, BASE_ICON_R*0.62, { stroke: color, width:1.5 });
+      const pts = [];
+      for(let i=0;i<5;i++){
+        const ang = -Math.PI/2 + i*(2*Math.PI/5);
+        pts.push([cx + Math.cos(ang)*BASE_ICON_R*0.62, cy + Math.sin(ang)*BASE_ICON_R*0.62]);
+      }
+      drawPolygon(basesLayer, pts, { fill:'rgba(0,0,0,0.04)', stroke: color, width:1.5 });
+    } else {
+      const pts = [];
+      for(let i=0;i<5;i++){
+        const ang = -Math.PI/2 + i*(2*Math.PI/5);
+        pts.push([cx + Math.cos(ang)*BASE_ICON_R, cy + Math.sin(ang)*BASE_ICON_R]);
+      }
+      drawPolygon(basesLayer, pts, { fill:'rgba(255,255,255,0.08)', stroke: color, width:2 });
     }
-    drawPolygon(basesLayer, pts, { fill:'rgba(255,255,255,0.08)', stroke: color, width:2 });
     // 中心小亮點只是標示核心位置的裝飾，跟判定範圍無關（判定範圍已經是整圈 BASE_R）
     drawCircle(basesLayer, cx, cy, 4, { fill: color, opacity:0.95 });
   }
 
   function setAttrs(el, attrs){
     for(const k in attrs){ el.setAttribute(k, attrs[k]); }
+  }
+
+  function drawText(parent, x, y, str, opts){
+    const t = document.createElementNS(SVGNS, 'text');
+    setAttrs(t, {
+      x, y,
+      'font-size': opts.size || 12,
+      'font-family': "'Noto Sans TC', sans-serif",
+      fill: opts.fill || '#000',
+      opacity: opts.opacity != null ? opts.opacity : 1
+    });
+    if(opts.rotate) t.setAttribute('transform', 'rotate(' + opts.rotate + ' ' + x + ' ' + y + ')');
+    if(opts.className) t.setAttribute('class', opts.className);
+    t.textContent = str;
+    parent.appendChild(t);
+    return t;
   }
 
   function drawLine(parent, x1,y1,x2,y2, opts){
@@ -1212,6 +1378,7 @@
       drawLine(tracesLayer, t.x1, t.y1, t.x2, t.y2, { stroke:t.color, width:3, opacity:0.85, linecap:'round' });
     });
 
+    const isPaper = boardTheme === 'paper';
     state.pieces.forEach(p => {
       const g = document.createElementNS(SVGNS, 'g');
       g.setAttribute('data-piece-id', p.id);
@@ -1231,10 +1398,20 @@
             drawCircle(g, p.x, p.y, shipR+10, { stroke: col, width:1.2, opacity:0.5 });
           }
         }
-        drawPolygon(g, p.king ? kingShipPoints(p.x, p.y, shipR, facingRight) : shipPoints(p.x, p.y, shipR, facingRight),
-          { fill: p.king ? (p.owner===1 ? 'rgba(79,195,255,0.28)' : 'rgba(255,107,107,0.28)') : '#f4f8ff', stroke: col, width:2.2, linejoin:'round' });
+        if(isPaper){
+          // 紙上版：簡單的墨水圓圈棋子，旗艦用雙圈標示，取代太空船造型
+          drawCircle(g, p.x, p.y, DOT_R, { fill:'#fff', stroke: col, width:2.2 });
+          drawCircle(g, p.x+1.2, p.y-1, DOT_R-2, { stroke: col, width:1.2, opacity:0.55 });
+        } else {
+          drawPolygon(g, p.king ? kingShipPoints(p.x, p.y, shipR, facingRight) : shipPoints(p.x, p.y, shipR, facingRight),
+            { fill: p.king ? (p.owner===1 ? 'rgba(79,195,255,0.28)' : 'rgba(255,107,107,0.28)') : '#f4f8ff', stroke: col, width:2.2, linejoin:'round' });
+        }
         const hit = drawCircle(g, p.x, p.y, shipR+12, { fill:'rgba(0,0,0,0)' });
         hit.setAttribute('class', 'hit-area' + (isSelectable ? ' grabbable' : ''));
+      } else if(isPaper){
+        drawCircle(g, p.x, p.y, DOT_R, { fill:'#eee', stroke:'#999', width:1.5, dash:'2 3' });
+        drawLine(g, p.x-7, p.y-7, p.x+7, p.y+7, { stroke:'var(--graphite)', width:2 });
+        drawLine(g, p.x-7, p.y+7, p.x+7, p.y-7, { stroke:'var(--graphite)', width:2 });
       } else {
         drawCircle(g, p.x, p.y, DOT_R, { fill:'rgba(255,255,255,0.05)', stroke:'rgba(255,255,255,0.3)', width:1.5, dash:'2 3' });
         drawLine(g, p.x-7, p.y-7, p.x+7, p.y+7, { stroke:'#ff6b6b', width:2, opacity:0.7 });
@@ -1318,8 +1495,9 @@
   document.getElementById('restartBtn').addEventListener('click', restart);
   document.getElementById('restartBtn2').addEventListener('click', restart);
 
-  drawStars();
-  drawHazardAndBases();
+  let initialTheme = 'space';
+  try{ initialTheme = localStorage.getItem('pencilDuelTheme') || 'space'; }catch(e){}
+  applyTheme(initialTheme);
   state = freshState();
 })();
 </script>
