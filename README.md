@@ -36,6 +36,14 @@
 - **連文字說明都跟著換,不只是畫面**:標題副標、陣地標籤(星域→陣地)、提示文字、規則說明,紙上版都寫成對應的用詞(棋子而非太空船、據點而非基地光環),避免畫面上是圓圈棋子、文字卻還在講太空船艦的違和感。
 - **切換純粹是視覺層面的**:不影響連線對戰雙方的遊戲邏輯同步,兩人甚至可以各自選自己喜歡的主題對戰,互不影響、也不用喬好用同一個。
 
+## 3D 版
+
+朋友(lunkerchen)另外做了一個 [Three.js 3D 重製版](3d/),規則、彈射數學、連線訊息格式都跟這個 2D 版逐行對照,**可以用同一組房間代碼跨版本連線對戰**——2D 建房間、3D 加入,或反過來都行,已經實測驗證過。
+
+- 線上直接玩:**https://haifengli0527.github.io/pencil-duel-space/3d/**
+- 本機執行需要開一個靜態伺服器(ES modules 不能像 `pencil.html` 那樣直接雙擊打開),細節看 [3d/README.md](3d/README.md)。
+- 目前只有太空場景,還沒有移植「紙上版」主題。
+
 ## 如何遊玩
 
 線上直接玩:**https://haifengli0527.github.io/pencil-duel-space/**
@@ -53,6 +61,7 @@
 - 純 SVG + vanilla JavaScript,無框架、無建置工具。
 - 網路對戰使用手刻的 MQTT 3.1.1 client(WebSocket 傳輸),透過免費公開 broker(EMQX 為主、HiveMQ 備援)中繼,零外部依賴。
 - 字型:Google Fonts 的 Noto Sans TC。
+- `3d/` 子目錄是 [Three.js](https://threejs.org/) 3D 重製版,透過 jsDelivr CDN 載入(鎖版本),ES modules,不動這個 2D 版任何檔案。
 
 ## 參與貢獻
 

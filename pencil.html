@@ -304,6 +304,9 @@
 
   /* ---- 主題切換（太空版／紙上版） ---- */
   .theme-toggle-row{ display:flex; justify-content:center; gap:8px; margin:10px 0 14px; }
+  .cross-link{ text-align:center; margin:-4px 0 12px; font-size:0.78rem; }
+  .cross-link a{ color:var(--graphite-soft); text-decoration:underline; }
+  .cross-link a:hover{ color:var(--graphite); }
   .theme-toggle-btn{
     font-family:'Noto Sans TC', sans-serif;
     font-size:0.8rem;
@@ -355,6 +358,7 @@
     <button class="theme-toggle-btn active" data-theme-choice="space" type="button">🌌 太空版</button>
     <button class="theme-toggle-btn" data-theme-choice="paper" type="button">📝 紙上版</button>
   </div>
+  <div class="cross-link"><a href="3d/">🚀 也可以玩 3D 版（能跟這個 2D 版互相連線對戰）</a></div>
 
   <div id="lobbyArea" class="lobby-card">
     <div class="lobby-tabs">
